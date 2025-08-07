@@ -253,17 +253,19 @@ const BookingFormPersonal = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <User className="h-12 w-12 text-blue-600 mr-2" />
-            <h1 className="text-3xl font-bold text-gray-900">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row items-center justify-center mb-4">
+            <User className="h-8 w-8 sm:h-12 sm:w-12 text-blue-600 mb-2 sm:mb-0 sm:mr-2" />
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 text-center">
               Handling Umroh Personal
             </h1>
           </div>
-          <p className="text-xl text-gray-600">Form Booking Personal</p>
+          <p className="text-lg sm:text-xl text-gray-600">
+            Form Booking Personal
+          </p>
         </div>
 
         <Card className="shadow-lg bg-white">
@@ -291,10 +293,10 @@ const BookingFormPersonal = () => {
 
                 {/* Company and Personal Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Informasi Perusahaan & Personal
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="nama_perusahaan"
@@ -372,10 +374,10 @@ const BookingFormPersonal = () => {
 
                 {/* Flight Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Informasi Penerbangan
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <FormField
                       control={form.control}
                       name="nomor_penerbangan"
@@ -396,7 +398,7 @@ const BookingFormPersonal = () => {
 
                 {/* Travel Type */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Jenis Perjalanan*
                   </h3>
                   <FormField
@@ -404,7 +406,7 @@ const BookingFormPersonal = () => {
                     name="jenis_perjalanan"
                     render={() => (
                       <FormItem>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {travelTypes.map((type) => (
                             <FormField
                               key={type.id}
@@ -448,10 +450,10 @@ const BookingFormPersonal = () => {
 
                 {/* Location Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Informasi Lokasi
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <FormField
                       control={form.control}
                       name="area_penjemputan"
@@ -514,10 +516,10 @@ const BookingFormPersonal = () => {
 
                 {/* Pickup Information */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Informasi Pickup
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="tanggal_pickup"
@@ -558,7 +560,7 @@ const BookingFormPersonal = () => {
 
                 {/* Additional Notes */}
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold mb-4">
                     Catatan Tambahan
                   </h3>
                   <FormField
@@ -580,16 +582,20 @@ const BookingFormPersonal = () => {
                   />
                 </div>
 
-                <div className="flex justify-between pt-6">
-                  <Link to="/booking">
-                    <Button variant="outline" type="button">
+                <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6">
+                  <Link to="/booking" className="w-full sm:w-auto">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="w-full sm:w-auto text-sm sm:text-base"
+                    >
                       ← Kembali ke Pilihan Booking
                     </Button>
                   </Link>
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto text-sm sm:text-base"
                   >
                     {isSubmitting && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -602,8 +608,8 @@ const BookingFormPersonal = () => {
           </CardContent>
         </Card>
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>
+        <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-500 px-4">
+          <p className="break-words">
             Butuh bantuan? Hubungi tim support kami di support@handlingumroh.com
           </p>
           <p className="mt-2">
