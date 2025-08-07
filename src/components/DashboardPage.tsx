@@ -47,7 +47,9 @@ import {
   Download,
 } from "lucide-react";
 
-type HandlingBooking = Tables<"handling_bookings">;
+type HandlingBooking = Tables<"handling_bookings"> & {
+  bank_name?: string;
+};
 
 interface Order {
   id: string;

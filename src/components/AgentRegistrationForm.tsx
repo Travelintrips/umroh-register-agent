@@ -117,7 +117,7 @@ const AgentRegistrationForm = () => {
         // Insert data into Supabase users table
         const { data: insertedData, error: dbError } = await supabase
           .from("users")
-          .upsert([registrationData], { onConflict: ["id"] })
+          .upsert([registrationData], { onConflict: "id" })
           .select();
 
         if (dbError) {
