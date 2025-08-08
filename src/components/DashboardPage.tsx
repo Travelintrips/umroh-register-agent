@@ -25,6 +25,10 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { Label } from "./ui/label";
+import { Separator } from "./ui/separator";
 import { supabase } from "../lib/supabase";
 import { User } from "@supabase/supabase-js";
 import { Tables } from "../types/supabase";
@@ -51,6 +55,8 @@ type HandlingBooking = Tables<"handling_bookings"> & {
   bank_name?: string;
 };
 
+type PaymentMethod = Tables<"payment_methods">;
+
 interface Order {
   id: string;
   package_name: string;
@@ -73,14 +79,18 @@ const DashboardPage = () => {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<
-    "dashboard" | "booking" | "saldo"
+    "dashboard" | "booking" | "saldo" | "riwayat-transaksi" | "riwayat-topup"
   >("dashboard");
+  const [saldo, setSaldo] = useState<number>(0);
+  const [loadingSaldo, setLoadingSaldo] = useState<boolean>(true);
   const [currentBalance, setCurrentBalance] = useState(5000000);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [bankMethods, setBankMethods] = useState<PaymentMethod[]>([]);
+  const [selectedBankMethod, setSelectedBankMethod] = useState<string>("");
 
   const [bookingCodeFilter, setBookingCodeFilter] = useState("");
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -190,16 +200,64 @@ const DashboardPage = () => {
     }
   };
 
+  const fetchUserSaldo = async (userId: string) => {
+    try {
+      setLoadingSaldo(true);
+      const { data, error } = await supabase
+        .from("users")
+        .select("saldo")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching user saldo:", error);
+        setSaldo(0);
+        return;
+      }
+
+      setSaldo(data?.saldo || 0);
+    } catch (error) {
+      console.error("Error in fetchUserSaldo:", error);
+      setSaldo(0);
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
+
+  const fetchBankMethods = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("payment_methods")
+        .select("*")
+        .eq("type", "manual")
+        .eq("is_active", true)
+        .order("bank_name", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching bank methods:", error);
+        return;
+      }
+
+      setBankMethods(data || []);
+    } catch (error) {
+      console.error("Error in fetchBankMethods:", error);
+    }
+  };
+
   useEffect(() => {
+    // Fetch bank methods on component mount
+    fetchBankMethods();
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
         navigate("/signin");
       } else {
-        // Fetch handling bookings and user role for the current user
+        // Fetch handling bookings, user role, and saldo for the current user
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
+        fetchUserSaldo(session.user.id);
       }
       setLoading(false);
     });
@@ -212,9 +270,10 @@ const DashboardPage = () => {
       if (!session?.user) {
         navigate("/signin");
       } else {
-        // Fetch handling bookings and user role for the current user
+        // Fetch handling bookings, user role, and saldo for the current user
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
+        fetchUserSaldo(session.user.id);
       }
     });
 
@@ -445,6 +504,22 @@ const DashboardPage = () => {
               <Wallet className="h-5 w-5 mr-3" />
               Saldo
             </Button>
+            <Button
+              onClick={() => setActiveMenu("riwayat-transaksi")}
+              variant={activeMenu === "riwayat-transaksi" ? "default" : "ghost"}
+              className="w-full justify-start text-left hover:bg-green-50 hover:text-green-700"
+            >
+              <Package className="h-5 w-5 mr-3" />
+              Riwayat Transaksi
+            </Button>
+            <Button
+              onClick={() => setActiveMenu("riwayat-topup")}
+              variant={activeMenu === "riwayat-topup" ? "default" : "ghost"}
+              className="w-full justify-start text-left hover:bg-green-50 hover:text-green-700"
+            >
+              <DollarSign className="h-5 w-5 mr-3" />
+              Riwayat Top Up
+            </Button>
           </div>
         </nav>
 
@@ -500,6 +575,8 @@ const DashboardPage = () => {
                     "Dashboard - Layanan Handling Bandara"}
                   {activeMenu === "booking" && "Kelola Pesanan"}
                   {activeMenu === "saldo" && "Kelola Saldo"}
+                  {activeMenu === "riwayat-transaksi" && "Riwayat Transaksi"}
+                  {activeMenu === "riwayat-topup" && "Riwayat Top Up"}
                 </h1>
               </div>
               <div className="flex items-center space-x-4">
@@ -910,7 +987,11 @@ const DashboardPage = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="text-4xl font-bold text-green-600 mb-4">
-                      {formatCurrency(currentBalance)}
+                      {loadingSaldo ? (
+                        <div className="animate-pulse bg-gray-200 h-10 w-48 rounded"></div>
+                      ) : (
+                        formatCurrency(saldo)
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Saldo tersedia untuk transaksi
@@ -934,9 +1015,15 @@ const DashboardPage = () => {
                         type="number"
                         value={topUpAmount}
                         onChange={(e) => setTopUpAmount(e.target.value)}
-                        placeholder="Masukkan jumlah"
+                        placeholder="Masukkan jumlah (min. 10.000)"
+                        min="10000"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
+                      {topUpAmount && parseInt(topUpAmount) < 10000 && (
+                        <p className="text-red-500 text-xs mt-1">
+                          Minimum top up adalah Rp 10.000
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="text-sm font-medium mb-2 block">
@@ -945,9 +1032,10 @@ const DashboardPage = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <button
                           type="button"
-                          onClick={() =>
-                            setSelectedPaymentMethod("bank_transfer")
-                          }
+                          onClick={() => {
+                            setSelectedPaymentMethod("bank_transfer");
+                            setSelectedBankMethod("");
+                          }}
                           className={`p-4 border-2 rounded-lg text-left transition-all ${
                             selectedPaymentMethod === "bank_transfer"
                               ? "border-green-500 bg-green-50 text-green-700"
@@ -961,7 +1049,10 @@ const DashboardPage = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setSelectedPaymentMethod("paylabs")}
+                          onClick={() => {
+                            setSelectedPaymentMethod("paylabs");
+                            setSelectedBankMethod("");
+                          }}
                           className={`p-4 border-2 rounded-lg text-left transition-all ${
                             selectedPaymentMethod === "paylabs"
                               ? "border-green-500 bg-green-50 text-green-700"
@@ -975,21 +1066,97 @@ const DashboardPage = () => {
                         </button>
                       </div>
                     </div>
+
+                    {/* Bank Selection for Bank Transfer */}
+                    {selectedPaymentMethod === "bank_transfer" &&
+                      bankMethods.length > 0 && (
+                        <div className="mt-4">
+                          <Separator className="mb-4" />
+                          <label className="text-sm font-medium mb-3 block">
+                            Pilih Bank Transfer
+                          </label>
+                          <RadioGroup
+                            value={selectedBankMethod}
+                            onValueChange={setSelectedBankMethod}
+                            className="space-y-3 max-h-48 overflow-y-auto"
+                          >
+                            {bankMethods.map((method) => (
+                              <div
+                                key={method.id}
+                                className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
+                              >
+                                <RadioGroupItem
+                                  value={method.id}
+                                  id={method.id}
+                                  className="mt-1"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <Label
+                                    htmlFor={method.id}
+                                    className="text-sm font-medium cursor-pointer"
+                                  >
+                                    {method.bank_name}
+                                  </Label>
+                                  <div className="text-xs text-gray-600 mt-1">
+                                    <div>A/N: {method.account_holder}</div>
+                                    <div>No. Rek: {method.account_number}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                          {selectedBankMethod && (
+                            <div className="mt-3 p-2 bg-green-50 rounded text-sm text-green-700">
+                              {
+                                bankMethods.find(
+                                  (m) => m.id === selectedBankMethod,
+                                )?.bank_name
+                              }{" "}
+                              dipilih
+                            </div>
+                          )}
+                        </div>
+                      )}
                     <Button
                       className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      disabled={!topUpAmount || !selectedPaymentMethod}
-                      onClick={() => {
+                      disabled={
+                        !topUpAmount ||
+                        parseInt(topUpAmount) < 10000 ||
+                        !selectedPaymentMethod ||
+                        (selectedPaymentMethod === "bank_transfer" &&
+                          !selectedBankMethod)
+                      }
+                      onClick={async () => {
                         if (topUpAmount && selectedPaymentMethod) {
-                          const paymentMethodText =
-                            selectedPaymentMethod === "bank_transfer"
-                              ? "Bank Transfer manual konfirmasi"
-                              : "Paylabs auto konfirmasi";
+                          let paymentMethodText = "";
+
+                          if (selectedPaymentMethod === "bank_transfer") {
+                            const selectedBank = bankMethods.find(
+                              (method) => method.id === selectedBankMethod,
+                            );
+                            paymentMethodText = `Bank Transfer (${selectedBank?.bank_name}) - manual konfirmasi`;
+                          } else {
+                            paymentMethodText = "Paylabs auto konfirmasi";
+                          }
+
+                          // Update saldo in database
+                          const newSaldo = saldo + parseInt(topUpAmount);
+                          setSaldo(newSaldo);
+
+                          // Update in database
+                          if (user) {
+                            await supabase
+                              .from("users")
+                              .update({ saldo: newSaldo })
+                              .eq("id", user.id);
+                          }
 
                           setCurrentBalance(
                             (prev) => prev + parseInt(topUpAmount),
                           );
                           setTopUpAmount("");
                           setSelectedPaymentMethod("");
+                          setSelectedBankMethod("");
                           alert(
                             `Top up berhasil melalui ${paymentMethodText}!`,
                           );
@@ -1055,6 +1222,205 @@ const DashboardPage = () => {
                             +{formatCurrency(3500000)}
                           </TableCell>
                           <TableCell>{formatCurrency(3500000)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {activeMenu === "riwayat-transaksi" && (
+            <>
+              {/* Transaction History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl">Riwayat Transaksi</CardTitle>
+                  <CardDescription>
+                    Riwayat booking dan pemotongan saldo untuk pembayaran
+                    booking
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tanggal</TableHead>
+                          <TableHead>ID Booking</TableHead>
+                          <TableHead>Nama Customer</TableHead>
+                          <TableHead>Type Travel</TableHead>
+                          <TableHead>Jumlah Dipotong</TableHead>
+                          <TableHead>Saldo Setelah</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>20 Jan 2024</TableCell>
+                          <TableCell className="font-mono">ORD-003</TableCell>
+                          <TableCell>Budi Santoso</TableCell>
+                          <TableCell>
+                            Paket Layanan Handling Bandara Keluarga
+                          </TableCell>
+                          <TableCell className="text-red-600 font-medium">
+                            -{formatCurrency(1000000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(4000000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>15 Jan 2024</TableCell>
+                          <TableCell className="font-mono">ORD-001</TableCell>
+                          <TableCell>Ahmad Wijaya</TableCell>
+                          <TableCell>
+                            Paket Layanan Handling Bandara Regular 14 Hari
+                          </TableCell>
+                          <TableCell className="text-red-600 font-medium">
+                            -{formatCurrency(500000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(5000000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>10 Jan 2024</TableCell>
+                          <TableCell className="font-mono">ORD-002</TableCell>
+                          <TableCell>Siti Nurhaliza</TableCell>
+                          <TableCell>
+                            Paket Layanan Handling Bandara Plus 21 Hari
+                          </TableCell>
+                          <TableCell className="text-red-600 font-medium">
+                            -{formatCurrency(750000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(5500000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell
+                            colSpan={7}
+                            className="text-center py-8 text-gray-500"
+                          >
+                            Tidak ada transaksi lainnya
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {activeMenu === "riwayat-topup" && (
+            <>
+              {/* Top Up History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl">Riwayat Top Up</CardTitle>
+                  <CardDescription>
+                    Riwayat transaksi top up saldo
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tanggal</TableHead>
+                          <TableHead>ID Transaksi</TableHead>
+                          <TableHead>Metode Pembayaran</TableHead>
+                          <TableHead>Jumlah Top Up</TableHead>
+                          <TableHead>Saldo Setelah</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>18 Jan 2024</TableCell>
+                          <TableCell className="font-mono">TOP-004</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">Bank Transfer</div>
+                              <div className="text-sm text-gray-600">BCA</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            +{formatCurrency(1500000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(6250000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>15 Jan 2024</TableCell>
+                          <TableCell className="font-mono">TOP-003</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">Bank Transfer</div>
+                              <div className="text-sm text-gray-600">
+                                Mandiri
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            +{formatCurrency(2000000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(4750000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>10 Jan 2024</TableCell>
+                          <TableCell className="font-mono">TOP-002</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">Paylabs</div>
+                              <div className="text-sm text-gray-600">
+                                Auto konfirmasi
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            +{formatCurrency(1000000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(2750000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>05 Jan 2024</TableCell>
+                          <TableCell className="font-mono">TOP-001</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">Bank Transfer</div>
+                              <div className="text-sm text-gray-600">BCA</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            +{formatCurrency(1750000)}
+                          </TableCell>
+                          <TableCell>{formatCurrency(1750000)}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">Berhasil</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-gray-500"
+                          >
+                            Tidak ada transaksi top up lainnya
+                          </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
