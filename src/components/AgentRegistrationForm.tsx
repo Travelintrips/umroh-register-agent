@@ -48,8 +48,8 @@ const formSchema = z.object({
     .min(6, { message: "Password must be at least 6 characters" }),
 
   // Terms and Conditions
-  termsAccepted: z.literal(true, {
-    errorMap: () => ({ message: "You must accept the terms and conditions" }),
+  termsAccepted: z.boolean().refine((val) => val === true, {
+    message: "You must accept the terms and conditions",
   }),
 });
 
