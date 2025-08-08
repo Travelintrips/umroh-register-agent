@@ -91,6 +91,11 @@ const DashboardPage = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [bankMethods, setBankMethods] = useState<PaymentMethod[]>([]);
   const [selectedBankMethod, setSelectedBankMethod] = useState<string>("");
+  const [senderName, setSenderName] = useState("");
+  const [senderBank, setSenderBank] = useState("");
+  const [senderAccount, setSenderAccount] = useState("");
+  const [requestNote, setRequestNote] = useState("");
+  const [isSubmittingTopUp, setIsSubmittingTopUp] = useState(false);
 
   const [bookingCodeFilter, setBookingCodeFilter] = useState("");
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -258,6 +263,11 @@ const DashboardPage = () => {
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
         fetchUserSaldo(session.user.id);
+
+        // Auto-populate sender name with user's full name
+        const userFullName =
+          session.user.user_metadata?.full_name || session.user.email || "";
+        setSenderName(userFullName);
       }
       setLoading(false);
     });
@@ -274,6 +284,11 @@ const DashboardPage = () => {
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
         fetchUserSaldo(session.user.id);
+
+        // Auto-populate sender name with user's full name
+        const userFullName =
+          session.user.user_metadata?.full_name || session.user.email || "";
+        setSenderName(userFullName);
       }
     });
 
@@ -977,197 +992,346 @@ const DashboardPage = () => {
           {activeMenu === "saldo" && (
             <>
               {/* Balance Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl flex items-center">
-                      <Wallet className="h-6 w-6 mr-2 text-green-600" />
-                      Saldo Saat Ini
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-4xl font-bold text-green-600 mb-4">
-                      {loadingSaldo ? (
-                        <div className="animate-pulse bg-gray-200 h-10 w-48 rounded"></div>
-                      ) : (
-                        formatCurrency(saldo)
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Saldo tersedia untuk transaksi
-                    </p>
-                  </CardContent>
-                </Card>
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center">
+                    <Wallet className="h-6 w-6 mr-2 text-green-600" />
+                    Saldo Saat Ini
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-4xl font-bold text-green-600 mb-4">
+                    {loadingSaldo ? (
+                      <div className="animate-pulse bg-gray-200 h-10 w-48 rounded"></div>
+                    ) : (
+                      formatCurrency(saldo)
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Saldo tersedia untuk transaksi
+                  </p>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">Top Up Saldo</CardTitle>
-                    <CardDescription>
-                      Isi saldo untuk melakukan transaksi
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Jumlah Top Up
-                      </label>
-                      <input
-                        type="number"
-                        value={topUpAmount}
-                        onChange={(e) => setTopUpAmount(e.target.value)}
-                        placeholder="Masukkan jumlah (min. 10.000)"
-                        min="10000"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                      {topUpAmount && parseInt(topUpAmount) < 10000 && (
-                        <p className="text-red-500 text-xs mt-1">
-                          Minimum top up adalah Rp 10.000
-                        </p>
-                      )}
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
+                    <div className="flex justify-between items-center md:flex-col md:items-start">
+                      <span className="text-sm text-gray-600">Status Akun</span>
+                      <span className="text-sm font-medium text-green-600">
+                        Aktif
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Metode Pembayaran
-                      </label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPaymentMethod("bank_transfer");
-                            setSelectedBankMethod("");
-                          }}
-                          className={`p-4 border-2 rounded-lg text-left transition-all ${
-                            selectedPaymentMethod === "bank_transfer"
-                              ? "border-green-500 bg-green-50 text-green-700"
-                              : "border-gray-300 hover:border-gray-400"
-                          }`}
-                        >
-                          <div className="font-medium mb-1">Bank Transfer</div>
-                          <div className="text-sm text-gray-600">
-                            Manual konfirmasi
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPaymentMethod("paylabs");
-                            setSelectedBankMethod("");
-                          }}
-                          className={`p-4 border-2 rounded-lg text-left transition-all ${
-                            selectedPaymentMethod === "paylabs"
-                              ? "border-green-500 bg-green-50 text-green-700"
-                              : "border-gray-300 hover:border-gray-400"
-                          }`}
-                        >
-                          <div className="font-medium mb-1">Paylabs</div>
-                          <div className="text-sm text-gray-600">
-                            Auto konfirmasi
-                          </div>
-                        </button>
+                    <div className="flex justify-between items-center md:flex-col md:items-start">
+                      <span className="text-sm text-gray-600">
+                        Total Top Up
+                      </span>
+                      <span className="text-sm font-medium">5 kali</span>
+                    </div>
+                    <div className="flex justify-between items-center md:flex-col md:items-start">
+                      <span className="text-sm text-gray-600">
+                        Terakhir Top Up
+                      </span>
+                      <span className="text-sm font-medium">18 Jan 2024</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Top Up Form */}
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle className="text-xl">Top Up Saldo</CardTitle>
+                  <CardDescription>
+                    Isi saldo untuk melakukan transaksi
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      Jumlah Top Up
+                    </label>
+                    <input
+                      type="number"
+                      value={topUpAmount}
+                      onChange={(e) => setTopUpAmount(e.target.value)}
+                      placeholder="Masukkan jumlah (min. 10.000)"
+                      min="10000"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    {topUpAmount && parseInt(topUpAmount) < 10000 && (
+                      <p className="text-red-500 text-xs mt-1">
+                        Minimum top up adalah Rp 10.000
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Sender Information Section */}
+                  <div className="space-y-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                      Informasi Pengirim / Yang Request
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Nama pemilik rekening pengirim *
+                        </label>
+                        <Input
+                          type="text"
+                          value={senderName}
+                          onChange={(e) => setSenderName(e.target.value)}
+                          placeholder="Masukkan nama pemilik rekening"
+                          className="w-full bg-gray-50"
+                          readOnly
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Otomatis terisi sesuai nama akun yang login
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Bank pengirim *
+                        </label>
+                        <Input
+                          type="text"
+                          value={senderBank}
+                          onChange={(e) => setSenderBank(e.target.value)}
+                          placeholder="Contoh: BCA, Mandiri, BRI"
+                          className="w-full"
+                        />
                       </div>
                     </div>
 
-                    {/* Bank Selection for Bank Transfer */}
-                    {selectedPaymentMethod === "bank_transfer" &&
-                      bankMethods.length > 0 && (
-                        <div className="mt-4">
-                          <Separator className="mb-4" />
-                          <label className="text-sm font-medium mb-3 block">
-                            Pilih Bank Transfer
-                          </label>
-                          <RadioGroup
-                            value={selectedBankMethod}
-                            onValueChange={setSelectedBankMethod}
-                            className="space-y-3 max-h-48 overflow-y-auto"
-                          >
-                            {bankMethods.map((method) => (
-                              <div
-                                key={method.id}
-                                className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
-                              >
-                                <RadioGroupItem
-                                  value={method.id}
-                                  id={method.id}
-                                  className="mt-1"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <Label
-                                    htmlFor={method.id}
-                                    className="text-sm font-medium cursor-pointer"
-                                  >
-                                    {method.bank_name}
-                                  </Label>
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    <div>A/N: {method.account_holder}</div>
-                                    <div>No. Rek: {method.account_number}</div>
-                                  </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Nomor rekening pengirim *
+                      </label>
+                      <Input
+                        type="text"
+                        value={senderAccount}
+                        onChange={(e) => setSenderAccount(e.target.value)}
+                        placeholder="Masukkan nomor rekening"
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Catatan Request (Opsional)
+                      </label>
+                      <textarea
+                        value={requestNote}
+                        onChange={(e) => setRequestNote(e.target.value)}
+                        placeholder="Tambahkan catatan atau keterangan khusus untuk request ini..."
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      Metode Pembayaran
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPaymentMethod("bank_transfer");
+                          setSelectedBankMethod("");
+                        }}
+                        className={`p-4 border-2 rounded-lg text-left transition-all ${
+                          selectedPaymentMethod === "bank_transfer"
+                            ? "border-green-500 bg-green-50 text-green-700"
+                            : "border-gray-300 hover:border-gray-400"
+                        }`}
+                      >
+                        <div className="font-medium mb-1">Bank Transfer</div>
+                        <div className="text-sm text-gray-600">
+                          Manual konfirmasi
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPaymentMethod("paylabs");
+                          setSelectedBankMethod("");
+                        }}
+                        className={`p-4 border-2 rounded-lg text-left transition-all ${
+                          selectedPaymentMethod === "paylabs"
+                            ? "border-green-500 bg-green-50 text-green-700"
+                            : "border-gray-300 hover:border-gray-400"
+                        }`}
+                      >
+                        <div className="font-medium mb-1">Paylabs</div>
+                        <div className="text-sm text-gray-600">
+                          Auto konfirmasi
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bank Selection for Bank Transfer */}
+                  {selectedPaymentMethod === "bank_transfer" &&
+                    bankMethods.length > 0 && (
+                      <div className="mt-4">
+                        <Separator className="mb-4" />
+                        <label className="text-sm font-medium mb-3 block">
+                          Pilih Bank Transfer
+                        </label>
+                        <RadioGroup
+                          value={selectedBankMethod}
+                          onValueChange={setSelectedBankMethod}
+                          className="space-y-3 max-h-48 overflow-y-auto"
+                        >
+                          {bankMethods.map((method) => (
+                            <div
+                              key={method.id}
+                              className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
+                            >
+                              <RadioGroupItem
+                                value={method.id}
+                                id={method.id}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <Label
+                                  htmlFor={method.id}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  {method.bank_name}
+                                </Label>
+                                <div className="text-xs text-gray-600 mt-1">
+                                  <div>A/N: {method.account_holder}</div>
+                                  <div>No. Rek: {method.account_number}</div>
                                 </div>
                               </div>
-                            ))}
-                          </RadioGroup>
-                          {selectedBankMethod && (
-                            <div className="mt-3 p-2 bg-green-50 rounded text-sm text-green-700">
-                              {
-                                bankMethods.find(
-                                  (m) => m.id === selectedBankMethod,
-                                )?.bank_name
-                              }{" "}
-                              dipilih
                             </div>
-                          )}
-                        </div>
-                      )}
-                    <Button
-                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      disabled={
-                        !topUpAmount ||
-                        parseInt(topUpAmount) < 10000 ||
-                        !selectedPaymentMethod ||
-                        (selectedPaymentMethod === "bank_transfer" &&
-                          !selectedBankMethod)
-                      }
-                      onClick={async () => {
-                        if (topUpAmount && selectedPaymentMethod) {
-                          let paymentMethodText = "";
+                          ))}
+                        </RadioGroup>
+                        {selectedBankMethod && (
+                          <div className="mt-3 p-2 bg-green-50 rounded text-sm text-green-700">
+                            {
+                              bankMethods.find(
+                                (m) => m.id === selectedBankMethod,
+                              )?.bank_name
+                            }{" "}
+                            dipilih
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    disabled={
+                      isSubmittingTopUp ||
+                      !topUpAmount ||
+                      parseInt(topUpAmount) < 10000 ||
+                      !selectedPaymentMethod ||
+                      (selectedPaymentMethod === "bank_transfer" &&
+                        !selectedBankMethod) ||
+                      !senderName.trim() ||
+                      !senderBank.trim() ||
+                      !senderAccount.trim()
+                    }
+                    onClick={async () => {
+                      if (topUpAmount && selectedPaymentMethod && user) {
+                        try {
+                          setIsSubmittingTopUp(true);
+
+                          let destinationAccount = "";
+                          let bankName = "";
 
                           if (selectedPaymentMethod === "bank_transfer") {
                             const selectedBank = bankMethods.find(
                               (method) => method.id === selectedBankMethod,
                             );
-                            paymentMethodText = `Bank Transfer (${selectedBank?.bank_name}) - manual konfirmasi`;
-                          } else {
-                            paymentMethodText = "Paylabs auto konfirmasi";
+                            destinationAccount =
+                              selectedBank?.account_number || "";
+                            bankName = selectedBank?.bank_name || "";
                           }
 
-                          // Update saldo in database
-                          const newSaldo = saldo + parseInt(topUpAmount);
-                          setSaldo(newSaldo);
-
-                          // Update in database
-                          if (user) {
-                            await supabase
-                              .from("users")
-                              .update({ saldo: newSaldo })
-                              .eq("id", user.id);
-                          }
-
-                          setCurrentBalance(
-                            (prev) => prev + parseInt(topUpAmount),
+                          // Generate reference number: TP-YYYYMMDD-HHMMSS-RANDOM
+                          const now = new Date();
+                          const year = now.getFullYear();
+                          const month = String(now.getMonth() + 1).padStart(
+                            2,
+                            "0",
                           );
+                          const day = String(now.getDate()).padStart(2, "0");
+                          const hours = String(now.getHours()).padStart(2, "0");
+                          const minutes = String(now.getMinutes()).padStart(
+                            2,
+                            "0",
+                          );
+                          const seconds = String(now.getSeconds()).padStart(
+                            2,
+                            "0",
+                          );
+                          const random = Math.floor(Math.random() * 10000)
+                            .toString()
+                            .padStart(4, "0");
+                          const referenceNo = `TP-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`;
+
+                          // Insert top-up request into database
+                          const { data, error } = await supabase
+                            .from("topup_requests")
+                            .insert({
+                              user_id: user.id,
+                              sender_name: senderName,
+                              sender_bank: senderBank,
+                              amount: parseInt(topUpAmount),
+                              method: selectedPaymentMethod,
+                              bank_name: bankName,
+                              destination_account: destinationAccount,
+                              sender_account: senderAccount,
+                              note: requestNote || null,
+                              reference_no: referenceNo,
+                            })
+                            .select()
+                            .single();
+
+                          if (error) {
+                            console.error(
+                              "Error creating top-up request:",
+                              error,
+                            );
+                            alert(
+                              "Gagal membuat request top up. Silakan coba lagi.",
+                            );
+                            setIsSubmittingTopUp(false);
+                            return;
+                          }
+
+                          // Reset form (keep sender name as it's auto-populated)
                           setTopUpAmount("");
                           setSelectedPaymentMethod("");
                           setSelectedBankMethod("");
-                          alert(
-                            `Top up berhasil melalui ${paymentMethodText}!`,
-                          );
+                          // Don't reset senderName as it's auto-populated from user data
+                          setSenderBank("");
+                          setSenderAccount("");
+                          setRequestNote("");
+
+                          // Navigate to details page with reference number
+                          navigate(`/topup-details?ref=${data.reference_no}`);
+                        } catch (error) {
+                          console.error("Error in top-up request:", error);
+                          alert("Terjadi kesalahan. Silakan coba lagi.");
+                          setIsSubmittingTopUp(false);
                         }
-                      }}
-                    >
-                      Top Up Sekarang
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
+                      }
+                    }}
+                  >
+                    {isSubmittingTopUp ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Memproses...
+                      </>
+                    ) : (
+                      "Top Up Sekarang"
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
 
               {/* Transaction History */}
               <Card>

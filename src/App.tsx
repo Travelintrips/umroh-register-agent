@@ -8,6 +8,7 @@ import BookingSelection from "./components/BookingSelection";
 import BookingFormPersonal from "./components/BookingFormPersonal";
 import BookingFormGroup from "./components/BookingFormGroup";
 import DashboardPage from "./components/DashboardPage";
+import TopUpDetails from "./components/TopUpDetails";
 import routes from "tempo-routes";
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/register" element={<AgentRegistrationForm />} />
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/topup-details" element={<TopUpDetails />} />
           <Route path="/booking" element={<BookingSelection />} />
           <Route path="/booking/personal" element={<BookingFormPersonal />} />
           <Route path="/booking/group" element={<BookingFormGroup />} />
