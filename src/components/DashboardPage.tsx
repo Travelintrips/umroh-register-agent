@@ -96,6 +96,11 @@ const DashboardPage = () => {
   const [senderAccount, setSenderAccount] = useState("");
   const [requestNote, setRequestNote] = useState("");
   const [isSubmittingTopUp, setIsSubmittingTopUp] = useState(false);
+  const [transactionHistory, setTransactionHistory] = useState<any[]>([]);
+  const [topUpHistory, setTopUpHistory] = useState<any[]>([]);
+  const [loadingTransactionHistory, setLoadingTransactionHistory] =
+    useState(false);
+  const [loadingTopUpHistory, setLoadingTopUpHistory] = useState(false);
 
   const [bookingCodeFilter, setBookingCodeFilter] = useState("");
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -249,6 +254,50 @@ const DashboardPage = () => {
     }
   };
 
+  const fetchTransactionHistory = async (userId: string) => {
+    try {
+      setLoadingTransactionHistory(true);
+      const { data, error } = await supabase
+        .from("histori_transaksi")
+        .select("*")
+        .eq("user_id", userId)
+        .order("trans_date", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching transaction history:", error);
+        return;
+      }
+
+      setTransactionHistory(data || []);
+    } catch (error) {
+      console.error("Error in fetchTransactionHistory:", error);
+    } finally {
+      setLoadingTransactionHistory(false);
+    }
+  };
+
+  const fetchTopUpHistory = async (userId: string) => {
+    try {
+      setLoadingTopUpHistory(true);
+      const { data, error } = await supabase
+        .from("topup_requests")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching top-up history:", error);
+        return;
+      }
+
+      setTopUpHistory(data || []);
+    } catch (error) {
+      console.error("Error in fetchTopUpHistory:", error);
+    } finally {
+      setLoadingTopUpHistory(false);
+    }
+  };
+
   useEffect(() => {
     // Fetch bank methods on component mount
     fetchBankMethods();
@@ -259,10 +308,12 @@ const DashboardPage = () => {
       if (!session?.user) {
         navigate("/signin");
       } else {
-        // Fetch handling bookings, user role, and saldo for the current user
+        // Fetch handling bookings, user role, saldo, and history for the current user
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
         fetchUserSaldo(session.user.id);
+        fetchTransactionHistory(session.user.id);
+        fetchTopUpHistory(session.user.id);
 
         // Auto-populate sender name with user's full name
         const userFullName =
@@ -280,10 +331,12 @@ const DashboardPage = () => {
       if (!session?.user) {
         navigate("/signin");
       } else {
-        // Fetch handling bookings, user role, and saldo for the current user
+        // Fetch handling bookings, user role, saldo, and history for the current user
         fetchHandlingBookings(session.user.id);
         fetchUserRole(session.user.id);
         fetchUserSaldo(session.user.id);
+        fetchTransactionHistory(session.user.id);
+        fetchTopUpHistory(session.user.id);
 
         // Auto-populate sender name with user's full name
         const userFullName =
@@ -1354,39 +1407,63 @@ const DashboardPage = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell>15 Jan 2024</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Top Up</Badge>
-                          </TableCell>
-                          <TableCell>Top up saldo via transfer bank</TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(2000000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(5000000)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>10 Jan 2024</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">Pembayaran</Badge>
-                          </TableCell>
-                          <TableCell>Pembayaran komisi ORD-001</TableCell>
-                          <TableCell className="text-red-600 font-medium">
-                            -{formatCurrency(500000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(3000000)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>05 Jan 2024</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Top Up</Badge>
-                          </TableCell>
-                          <TableCell>Top up saldo via transfer bank</TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(3500000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(3500000)}</TableCell>
-                        </TableRow>
+                        {loadingTransactionHistory ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
+                              Loading...
+                            </TableCell>
+                          </TableRow>
+                        ) : transactionHistory.length > 0 ? (
+                          transactionHistory.map((transaction) => (
+                            <TableRow key={transaction.id}>
+                              <TableCell>
+                                {transaction.trans_date
+                                  ? formatDate(transaction.trans_date)
+                                  : "N/A"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    transaction.nominal > 0
+                                      ? "default"
+                                      : "secondary"
+                                  }
+                                >
+                                  {transaction.nominal > 0
+                                    ? "Top Up"
+                                    : "Pembayaran"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {transaction.keterangan ||
+                                  `Transaksi ${transaction.kode_booking}`}
+                              </TableCell>
+                              <TableCell
+                                className={
+                                  transaction.nominal > 0
+                                    ? "text-green-600 font-medium"
+                                    : "text-red-600 font-medium"
+                                }
+                              >
+                                {transaction.nominal > 0 ? "+" : ""}
+                                {formatCurrency(transaction.nominal)}
+                              </TableCell>
+                              <TableCell>
+                                {formatCurrency(transaction.saldo_akhir)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="text-center py-8 text-gray-500"
+                            >
+                              Belum ada riwayat transaksi
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -1413,67 +1490,56 @@ const DashboardPage = () => {
                         <TableRow>
                           <TableHead>Tanggal</TableHead>
                           <TableHead>ID Booking</TableHead>
-                          <TableHead>Nama Customer</TableHead>
-                          <TableHead>Type Travel</TableHead>
+                          <TableHead>Deskripsi</TableHead>
                           <TableHead>Jumlah Dipotong</TableHead>
                           <TableHead>Saldo Setelah</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell>20 Jan 2024</TableCell>
-                          <TableCell className="font-mono">ORD-003</TableCell>
-                          <TableCell>Budi Santoso</TableCell>
-                          <TableCell>
-                            Paket Layanan Handling Bandara Keluarga
-                          </TableCell>
-                          <TableCell className="text-red-600 font-medium">
-                            -{formatCurrency(1000000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(4000000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>15 Jan 2024</TableCell>
-                          <TableCell className="font-mono">ORD-001</TableCell>
-                          <TableCell>Ahmad Wijaya</TableCell>
-                          <TableCell>
-                            Paket Layanan Handling Bandara Regular 14 Hari
-                          </TableCell>
-                          <TableCell className="text-red-600 font-medium">
-                            -{formatCurrency(500000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(5000000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>10 Jan 2024</TableCell>
-                          <TableCell className="font-mono">ORD-002</TableCell>
-                          <TableCell>Siti Nurhaliza</TableCell>
-                          <TableCell>
-                            Paket Layanan Handling Bandara Plus 21 Hari
-                          </TableCell>
-                          <TableCell className="text-red-600 font-medium">
-                            -{formatCurrency(750000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(5500000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell
-                            colSpan={7}
-                            className="text-center py-8 text-gray-500"
-                          >
-                            Tidak ada transaksi lainnya
-                          </TableCell>
-                        </TableRow>
+                        {loadingTransactionHistory ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-8">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
+                              Loading...
+                            </TableCell>
+                          </TableRow>
+                        ) : transactionHistory.length > 0 ? (
+                          transactionHistory.map((transaction) => (
+                            <TableRow key={transaction.id}>
+                              <TableCell>
+                                {transaction.trans_date
+                                  ? formatDate(transaction.trans_date)
+                                  : "N/A"}
+                              </TableCell>
+                              <TableCell className="font-mono">
+                                {transaction.kode_booking || "N/A"}
+                              </TableCell>
+                              <TableCell>
+                                {transaction.keterangan ||
+                                  `Transaksi ${transaction.kode_booking}`}
+                              </TableCell>
+                              <TableCell className="text-red-600 font-medium">
+                                {formatCurrency(Math.abs(transaction.nominal))}
+                              </TableCell>
+                              <TableCell>
+                                {formatCurrency(transaction.saldo_akhir)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="default">Berhasil</Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell
+                              colSpan={6}
+                              className="text-center py-8 text-gray-500"
+                            >
+                              Belum ada riwayat transaksi
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -1501,91 +1567,78 @@ const DashboardPage = () => {
                           <TableHead>ID Transaksi</TableHead>
                           <TableHead>Metode Pembayaran</TableHead>
                           <TableHead>Jumlah Top Up</TableHead>
-                          <TableHead>Saldo Setelah</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell>18 Jan 2024</TableCell>
-                          <TableCell className="font-mono">TOP-004</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">Bank Transfer</div>
-                              <div className="text-sm text-gray-600">BCA</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(1500000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(6250000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>15 Jan 2024</TableCell>
-                          <TableCell className="font-mono">TOP-003</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">Bank Transfer</div>
-                              <div className="text-sm text-gray-600">
-                                Mandiri
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(2000000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(4750000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>10 Jan 2024</TableCell>
-                          <TableCell className="font-mono">TOP-002</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">Paylabs</div>
-                              <div className="text-sm text-gray-600">
-                                Auto konfirmasi
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(1000000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(2750000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>05 Jan 2024</TableCell>
-                          <TableCell className="font-mono">TOP-001</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">Bank Transfer</div>
-                              <div className="text-sm text-gray-600">BCA</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-green-600 font-medium">
-                            +{formatCurrency(1750000)}
-                          </TableCell>
-                          <TableCell>{formatCurrency(1750000)}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">Berhasil</Badge>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell
-                            colSpan={6}
-                            className="text-center py-8 text-gray-500"
-                          >
-                            Tidak ada transaksi top up lainnya
-                          </TableCell>
-                        </TableRow>
+                        {loadingTopUpHistory ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
+                              Loading...
+                            </TableCell>
+                          </TableRow>
+                        ) : topUpHistory.length > 0 ? (
+                          topUpHistory.map((topup) => (
+                            <TableRow key={topup.id}>
+                              <TableCell>
+                                {topup.created_at
+                                  ? formatDate(topup.created_at)
+                                  : "N/A"}
+                              </TableCell>
+                              <TableCell className="font-mono">
+                                {topup.reference_no || topup.id.slice(0, 8)}
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">
+                                    {topup.method === "bank_transfer"
+                                      ? "Bank Transfer"
+                                      : topup.method === "paylabs"
+                                        ? "Paylabs"
+                                        : topup.method}
+                                  </div>
+                                  {topup.bank_name && (
+                                    <div className="text-sm text-gray-600">
+                                      {topup.bank_name}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-green-600 font-medium">
+                                +{formatCurrency(topup.amount)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    topup.status === "approved"
+                                      ? "default"
+                                      : topup.status === "pending"
+                                        ? "secondary"
+                                        : "destructive"
+                                  }
+                                >
+                                  {topup.status === "approved"
+                                    ? "Berhasil"
+                                    : topup.status === "pending"
+                                      ? "Menunggu"
+                                      : topup.status === "rejected"
+                                        ? "Ditolak"
+                                        : topup.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="text-center py-8 text-gray-500"
+                            >
+                              Belum ada riwayat top up
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
