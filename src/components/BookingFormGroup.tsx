@@ -108,6 +108,7 @@ const BookingFormGroup = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userSaldo, setUserSaldo] = useState<number>(0);
   const [servicePrices, setServicePrices] = useState<{ [key: string]: number }>(
     {},
   );
@@ -161,6 +162,7 @@ const BookingFormGroup = () => {
             console.error("Error fetching user profile:", error);
           } else {
             setUserProfile(profile);
+            setUserSaldo(profile.saldo || 0);
             // Auto-fill form with user data
             form.setValue("nama_perusahaan", profile.nama_perusahaan || "");
             form.setValue("nama_lengkap", profile.full_name || "");
@@ -278,9 +280,23 @@ const BookingFormGroup = () => {
       const totalServicePrice = calculateTotalPrice();
       const totalAmount = totalServicePrice * formData.jumlah_penumpang;
 
+      // Check if using saldo and validate sufficient balance
+      if (selectedPaymentMethod === "use_saldo") {
+        if (userSaldo < totalAmount) {
+          setSubmitError(
+            `Saldo tidak mencukupi. Saldo Anda: ${formatCurrency(userSaldo)}, Total pembayaran: ${formatCurrency(totalAmount)}`,
+          );
+          setIsSubmittingTopUp(false);
+          return;
+        }
+      }
+
       // Determine payment status based on payment method
       const paymentStatus =
-        selectedPaymentMethod === "cash" ? "Paid" : "tunggu konfirmasi Admin";
+        selectedPaymentMethod === "cash" ||
+        selectedPaymentMethod === "use_saldo"
+          ? "Paid"
+          : "tunggu konfirmasi Admin";
 
       // Get selected bank name if bank transfer is selected
       const selectedBank = bankTransferMethods.find(
@@ -335,6 +351,41 @@ const BookingFormGroup = () => {
 
       console.log("Booking data successfully inserted:", bookingResult);
 
+      // If using saldo, deduct from user balance and create transaction history
+      if (selectedPaymentMethod === "use_saldo") {
+        // Update user saldo
+        const newSaldo = userSaldo - totalAmount;
+        const { error: saldoError } = await supabase
+          .from("users")
+          .update({ saldo: newSaldo })
+          .eq("id", user.id);
+
+        if (saldoError) {
+          console.error("Error updating user saldo:", saldoError);
+          throw new Error(`Gagal memotong saldo: ${saldoError.message}`);
+        }
+
+        // Create transaction history record
+        const { error: historyError } = await supabase
+          .from("histori_transaksi")
+          .insert({
+            user_id: user.id,
+            kode_booking: generatedBookingCode,
+            nominal: -totalAmount, // Negative for deduction
+            saldo_akhir: newSaldo,
+            keterangan: `Pembayaran booking ${generatedBookingCode} - ${formData.category}`,
+            trans_date: new Date().toISOString(),
+          });
+
+        if (historyError) {
+          console.error("Error creating transaction history:", historyError);
+          // Don't throw error here as the booking is already created
+        }
+
+        // Update local saldo state
+        setUserSaldo(newSaldo);
+      }
+
       // Prepare data for payments table
       const paymentsData = {
         user_id: user?.id,
@@ -342,10 +393,17 @@ const BookingFormGroup = () => {
         payment_method: selectedPaymentMethod,
         paid_amount: totalAmount, // Total Pembayaran
         code_booking: generatedBookingCode,
-        status: selectedPaymentMethod === "cash" ? "auto paid" : "pending",
+        status:
+          selectedPaymentMethod === "cash" ||
+          selectedPaymentMethod === "use_saldo"
+            ? "auto paid"
+            : "pending",
         amount: totalServicePrice, // basic price
         payment_status:
-          selectedPaymentMethod === "cash" ? "completed" : "pending",
+          selectedPaymentMethod === "cash" ||
+          selectedPaymentMethod === "use_saldo"
+            ? "completed"
+            : "pending",
         created_at: new Date().toISOString(),
         bank_name: bankName, // Add selected bank name
       };
@@ -662,7 +720,9 @@ const BookingFormGroup = () => {
                   <span className="font-semibold">
                     {selectedPaymentMethod === "cash"
                       ? "Cash"
-                      : "Bank Transfer"}
+                      : selectedPaymentMethod === "use_saldo"
+                        ? "Gunakan Saldo"
+                        : "Bank Transfer"}
                   </span>
                 </div>
                 {selectedPaymentMethod === "bank_transfer" && selectedBank && (
@@ -913,7 +973,7 @@ const BookingFormGroup = () => {
           {/* Payment Method Selection */}
           <div>
             <h3 className="text-lg font-semibold mb-4">Metode Pembayaran*</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div
                 className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                   selectedPaymentMethod === "cash"
@@ -955,6 +1015,56 @@ const BookingFormGroup = () => {
                     <p className="text-xs text-gray-500">
                       Transfer ke rekening bank
                     </p>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  selectedPaymentMethod === "use_saldo"
+                    ? "border-green-500 bg-green-50"
+                    : userSaldo < totalAmount
+                      ? "border-red-200 bg-red-50 opacity-50 cursor-not-allowed"
+                      : "border-gray-200 hover:bg-gray-50"
+                }`}
+                onClick={() => {
+                  if (userSaldo >= totalAmount) {
+                    setSelectedPaymentMethod("use_saldo");
+                  }
+                }}
+              >
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    checked={selectedPaymentMethod === "use_saldo"}
+                    disabled={userSaldo < totalAmount}
+                    onChange={() => {
+                      if (userSaldo >= totalAmount) {
+                        setSelectedPaymentMethod("use_saldo");
+                      }
+                    }}
+                  />
+                  <div className="flex-1">
+                    <Label
+                      className={`text-sm font-medium ${
+                        userSaldo < totalAmount ? "text-red-500" : ""
+                      }`}
+                    >
+                      Gunakan Saldo
+                    </Label>
+                    <p
+                      className={`text-xs ${
+                        userSaldo < totalAmount
+                          ? "text-red-400"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Saldo: {formatCurrency(userSaldo)}
+                    </p>
+                    {userSaldo < totalAmount && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Saldo tidak mencukupi
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1027,7 +1137,9 @@ const BookingFormGroup = () => {
                 isSubmitting ||
                 !selectedPaymentMethod ||
                 (selectedPaymentMethod === "bank_transfer" &&
-                  !selectedBankMethod)
+                  !selectedBankMethod) ||
+                (selectedPaymentMethod === "use_saldo" &&
+                  userSaldo < totalAmount)
               }
               className="bg-green-600 hover:bg-green-700"
             >
