@@ -81,7 +81,7 @@ const UmrohHomePage = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <MapPin className="h-8 w-8 text-green-600 mr-2" />
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-sm sm:text-xl md:text-2xl font-bold text-gray-900">
                 Layanan Handling Bandara
               </h1>
             </div>

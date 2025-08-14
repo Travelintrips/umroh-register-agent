@@ -183,7 +183,7 @@ const BookingFormGroup = () => {
         const { data, error } = await supabase
           .from("airport_handling_services")
           .select("id, basic_price, trip_type")
-          .in("id", [22, 23, 32]);
+          .in("id", [34, 35, 37]);
 
         if (error) {
           console.error("Error fetching service prices:", error);
@@ -323,8 +323,8 @@ const BookingFormGroup = () => {
         pickup_time: formData.waktu_pickup,
         passengers: formData.jumlah_penumpang,
         additional_notes: formData.catatan_tambahan,
-        price: totalServicePrice,
-        total_amount: totalAmount,
+        price: totalServicePrice, // Basic price (subtotal per penumpang)
+        total_amount: totalAmount, // This was already correct
         status: "Menunggu Konfirmasi",
         code_booking: generatedBookingCode,
         created_at: new Date().toISOString(),
@@ -334,7 +334,7 @@ const BookingFormGroup = () => {
         company_name: formData.nama_perusahaan,
         payment_status: paymentStatus,
         passenger_area: formData.area_penjemputan, // Required field based on schema
-        total_price: totalAmount, // Required field based on schema
+        total_price: totalAmount, // Total amount (price * passengers)
         bank_name: bankName, // Add selected bank name
       };
 

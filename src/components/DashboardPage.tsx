@@ -70,6 +70,62 @@ interface Order {
   created_at: string;
 }
 
+// Util untuk membersihkan data dan mencegah " - undefined"
+const isBlank = (v: unknown) => {
+  if (v === null || v === undefined) return true;
+  const s = String(v).trim().toLowerCase();
+  return s === "" || s === "undefined" || s === "null";
+};
+
+const clean = (v: unknown, fallback = "") =>
+  isBlank(v) ? fallback : String(v).trim();
+
+const joinParts = (parts: Array<unknown>, sep = " - ") =>
+  parts
+    .map((p) => clean(p))
+    .filter(Boolean)
+    .join(sep);
+
+// Normalisasi booking data
+const normalizeBooking = (b: any) => ({
+  ...b,
+  code_booking: clean(b?.code_booking),
+  category: clean(b?.category, "Booking"),
+  travel_type: clean(b?.travel_type, ""),
+  travel_type_name: clean(b?.travel_type_name, ""),
+  type: clean(b?.type, ""),
+  jenis_perjalanan: clean(b?.jenis_perjalanan, ""),
+  package_name: undefined, // jangan pakai package_name lama yang sudah salah
+});
+
+// Bangun deskripsi transaksi dengan fallback yang rapi
+const buildTxnDescription = (t: any, bookings: any[]) => {
+  // Jika ada kode booking yang valid, tampilkan hanya "Pembayaran booking [kode]"
+  if (
+    t?.kode_booking &&
+    typeof t.kode_booking === "string" &&
+    t.kode_booking.trim() &&
+    t.kode_booking !== "undefined" &&
+    t.kode_booking !== "null"
+  ) {
+    return `Pembayaran booking ${t.kode_booking.trim()}`;
+  }
+
+  // Cek keterangan jika tidak ada kode booking
+  if (
+    t?.keterangan &&
+    typeof t.keterangan === "string" &&
+    t.keterangan.trim() &&
+    t.keterangan !== "undefined" &&
+    t.keterangan !== "null"
+  ) {
+    return t.keterangan.trim();
+  }
+
+  // Fallback untuk transaksi tanpa kode booking atau keterangan
+  return t?.nominal > 0 ? "Top Up Saldo" : "Pembayaran";
+};
+
 const DashboardPage = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +151,7 @@ const DashboardPage = () => {
   const [senderBank, setSenderBank] = useState("");
   const [senderAccount, setSenderAccount] = useState("");
   const [requestNote, setRequestNote] = useState("");
+  const [transferProof, setTransferProof] = useState<File | null>(null);
   const [isSubmittingTopUp, setIsSubmittingTopUp] = useState(false);
   const [transactionHistory, setTransactionHistory] = useState<any[]>([]);
   const [topUpHistory, setTopUpHistory] = useState<any[]>([]);
@@ -163,26 +220,33 @@ const DashboardPage = () => {
         return;
       }
 
-      setHandlingBookings(data || []);
+      setHandlingBookings((data || []).map(normalizeBooking));
 
       // Convert handling bookings to orders format for compatibility
-      const convertedOrders: Order[] = (data || []).map((booking) => ({
-        id: booking.code_booking || booking.id,
-        package_name: `${booking.category} - ${booking.travel_type}`,
-        customer_name: booking.customer_name,
-        departure_date: booking.pickup_date,
-        pickup_time: booking.pickup_time,
-        payment_method: booking.payment_method || "N/A",
-        status:
-          (booking.status as
-            | "pending"
-            | "confirmed"
-            | "cancelled"
-            | "completed") || "pending",
-        total_amount: booking.total_price || 0,
-        participants: booking.passengers || 1,
-        created_at: booking.created_at || new Date().toISOString(),
-      }));
+      const convertedOrders: Order[] = (data || []).map((booking) => {
+        const normalizedBooking = normalizeBooking(booking);
+        const category = clean(normalizedBooking?.category, "Layanan");
+        const travelType = clean(normalizedBooking?.travel_type, "");
+        const packageName = joinParts([category, travelType], " - ");
+
+        return {
+          id: booking.code_booking || booking.id,
+          package_name: packageName,
+          customer_name: booking.customer_name,
+          departure_date: booking.pickup_date,
+          pickup_time: booking.pickup_time,
+          payment_method: booking.payment_method || "N/A",
+          status:
+            (booking.status as
+              | "pending"
+              | "confirmed"
+              | "cancelled"
+              | "completed") || "pending",
+          total_amount: booking.total_price || 0,
+          participants: booking.passengers || 1,
+          created_at: booking.created_at || new Date().toISOString(),
+        };
+      });
 
       setOrders(convertedOrders);
       setFilteredOrders(convertedOrders);
@@ -268,7 +332,13 @@ const DashboardPage = () => {
         return;
       }
 
-      setTransactionHistory(data || []);
+      // Normalisasi saat mapping
+      const normalizeTxn = (t: any) => ({
+        ...t,
+        keterangan: clean(t?.keterangan),
+        kode_booking: clean(t?.kode_booking),
+      });
+      setTransactionHistory((data ?? []).map(normalizeTxn));
     } catch (error) {
       console.error("Error in fetchTransactionHistory:", error);
     } finally {
@@ -474,6 +544,7 @@ const DashboardPage = () => {
       "Passenger",
       "Payment Method",
       "Payment Status",
+      "Basic Price",
       "Total",
       "Status",
       "Tanggal Dibuat",
@@ -482,20 +553,27 @@ const DashboardPage = () => {
 
     const csvContent = [
       headers.join(","),
-      ...filteredOrders.map((order) =>
-        [
+      ...filteredOrders.map((order) => {
+        // Find the original booking data to get the basic price
+        const originalBooking = handlingBookings.find(
+          (booking) => (booking.code_booking || booking.id) === order.id,
+        );
+        const basicPrice = originalBooking?.price || 0;
+
+        return [
           `"${order.id}"`,
           `"${order.customer_name}"`,
           `"${order.package_name}"`,
           `"${order.participants} orang"`,
           `"${order.payment_method || "N/A"}"`,
           `"${order.status === "completed" ? "Lunas" : order.status === "confirmed" ? "Dibayar" : "Belum Bayar"}"`,
+          `"${formatCurrency(basicPrice)}"`,
           `"${formatCurrency(order.total_amount)}"`,
           `"${order.status === "pending" ? "Menunggu" : order.status === "confirmed" ? "Dikonfirmasi" : order.status === "cancelled" ? "Dibatalkan" : "Selesai"}"`,
           `"${formatDate(order.created_at)}"`,
           `"${formatDate(order.departure_date)}"`,
-        ].join(","),
-      ),
+        ].join(",");
+      }),
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -952,6 +1030,7 @@ const DashboardPage = () => {
                           <TableHead>Passenger</TableHead>
                           <TableHead>Payment Method</TableHead>
                           <TableHead>Payment Status</TableHead>
+                          <TableHead>Basic Price</TableHead>
                           <TableHead>Total</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Aksi</TableHead>
@@ -959,75 +1038,90 @@ const DashboardPage = () => {
                       </TableHeader>
                       <TableBody>
                         {filteredOrders.length > 0 ? (
-                          filteredOrders.map((order) => (
-                            <TableRow key={order.id}>
-                              <TableCell className="font-medium">
-                                {order.id.length > 8
-                                  ? `${order.id.slice(0, 8)}...`
-                                  : order.id}
-                              </TableCell>
-                              <TableCell>{order.customer_name}</TableCell>
-                              <TableCell className="max-w-xs truncate">
-                                {order.package_name}
-                              </TableCell>
-                              <TableCell>{order.participants} orang</TableCell>
-                              <TableCell>
-                                {order.payment_method || "N/A"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    order.status === "completed"
-                                      ? "default"
-                                      : order.status === "confirmed"
-                                        ? "secondary"
-                                        : "outline"
-                                  }
-                                >
-                                  {order.status === "completed"
-                                    ? "Lunas"
-                                    : order.status === "confirmed"
-                                      ? "Dibayar"
-                                      : "Belum Bayar"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {formatCurrency(order.total_amount)}
-                              </TableCell>
-                              <TableCell>
-                                {getStatusBadge(order.status)}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleViewOrder(order)}
+                          filteredOrders.map((order) => {
+                            // Find the original booking data to get the basic price
+                            const originalBooking = handlingBookings.find(
+                              (booking) =>
+                                (booking.code_booking || booking.id) ===
+                                order.id,
+                            );
+                            const basicPrice = originalBooking?.price || 0;
+
+                            return (
+                              <TableRow key={order.id}>
+                                <TableCell className="font-medium">
+                                  {order.id.length > 8
+                                    ? `${order.id.slice(0, 8)}...`
+                                    : order.id}
+                                </TableCell>
+                                <TableCell>{order.customer_name}</TableCell>
+                                <TableCell className="max-w-xs truncate">
+                                  {order.package_name}
+                                </TableCell>
+                                <TableCell>
+                                  {order.participants} orang
+                                </TableCell>
+                                <TableCell>
+                                  {order.payment_method || "N/A"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      order.status === "completed"
+                                        ? "default"
+                                        : order.status === "confirmed"
+                                          ? "secondary"
+                                          : "outline"
+                                    }
                                   >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  {isAdmin && (
-                                    <>
-                                      <Button variant="ghost" size="sm">
-                                        <Edit className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-red-600 hover:text-red-700"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                                    {order.status === "completed"
+                                      ? "Lunas"
+                                      : order.status === "confirmed"
+                                        ? "Dibayar"
+                                        : "Belum Bayar"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(basicPrice)}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(order.total_amount)}
+                                </TableCell>
+                                <TableCell>
+                                  {getStatusBadge(order.status)}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleViewOrder(order)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    {isAdmin && (
+                                      <>
+                                        <Button variant="ghost" size="sm">
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="text-red-600 hover:text-red-700"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={9}
+                              colSpan={10}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada pesanan handling bandara
@@ -1169,6 +1263,33 @@ const DashboardPage = () => {
 
                     <div>
                       <label className="text-sm font-medium mb-2 block">
+                        Upload Bukti Transfer *
+                      </label>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            setTransferProof(file);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Format yang didukung: JPG, PNG, PDF (Maksimal 5MB)
+                        </p>
+                        {transferProof && (
+                          <div className="flex items-center space-x-2 p-2 bg-green-50 rounded-md">
+                            <div className="text-sm text-green-700">
+                              ✓ File terpilih: {transferProof.name}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
                         Catatan Request (Opsional)
                       </label>
                       <textarea
@@ -1284,7 +1405,8 @@ const DashboardPage = () => {
                         !selectedBankMethod) ||
                       !senderName.trim() ||
                       !senderBank.trim() ||
-                      !senderAccount.trim()
+                      !senderAccount.trim() ||
+                      !transferProof
                     }
                     onClick={async () => {
                       if (topUpAmount && selectedPaymentMethod && user) {
@@ -1325,6 +1447,40 @@ const DashboardPage = () => {
                             .padStart(4, "0");
                           const referenceNo = `TP-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`;
 
+                          // Upload transfer proof file to Supabase storage
+                          let proofUrl = "";
+                          if (transferProof) {
+                            const fileExt = transferProof.name.split(".").pop();
+                            const fileName = `${user.id}/${referenceNo}.${fileExt}`;
+
+                            const { data: uploadData, error: uploadError } =
+                              await supabase.storage
+                                .from("transfer-proofs")
+                                .upload(fileName, transferProof, {
+                                  cacheControl: "3600",
+                                  upsert: false,
+                                });
+
+                            if (uploadError) {
+                              console.error(
+                                "Error uploading file:",
+                                uploadError,
+                              );
+                              alert(
+                                "Gagal mengupload bukti transfer. Silakan coba lagi.",
+                              );
+                              setIsSubmittingTopUp(false);
+                              return;
+                            }
+
+                            // Get public URL for the uploaded file
+                            const { data: urlData } = supabase.storage
+                              .from("transfer-proofs")
+                              .getPublicUrl(fileName);
+
+                            proofUrl = urlData.publicUrl;
+                          }
+
                           // Insert top-up request into database
                           const { data, error } = await supabase
                             .from("topup_requests")
@@ -1339,6 +1495,7 @@ const DashboardPage = () => {
                               sender_account: senderAccount,
                               note: requestNote || null,
                               reference_no: referenceNo,
+                              proof_url: proofUrl,
                             })
                             .select()
                             .single();
@@ -1363,6 +1520,7 @@ const DashboardPage = () => {
                           setSenderBank("");
                           setSenderAccount("");
                           setRequestNote("");
+                          setTransferProof(null);
 
                           // Navigate to details page with reference number
                           navigate(`/topup-details?ref=${data.reference_no}`);
@@ -1436,8 +1594,10 @@ const DashboardPage = () => {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {transaction.keterangan ||
-                                  `Transaksi ${transaction.kode_booking}`}
+                                {buildTxnDescription(
+                                  transaction,
+                                  handlingBookings,
+                                )}
                               </TableCell>
                               <TableCell
                                 className={
@@ -1516,8 +1676,10 @@ const DashboardPage = () => {
                                 {transaction.kode_booking || "N/A"}
                               </TableCell>
                               <TableCell>
-                                {transaction.keterangan ||
-                                  `Transaksi ${transaction.kode_booking}`}
+                                {buildTxnDescription(
+                                  transaction,
+                                  handlingBookings,
+                                )}
                               </TableCell>
                               <TableCell className="text-red-600 font-medium">
                                 {formatCurrency(Math.abs(transaction.nominal))}
