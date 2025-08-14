@@ -23,6 +23,13 @@ import {
   FormMessage,
 } from "./ui/form";
 import { Alert, AlertDescription } from "./ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { supabase } from "../lib/supabase";
 import { AlertCircle, Loader2, MapPin } from "lucide-react";
 
@@ -38,6 +45,7 @@ type SignInFormValues = z.infer<typeof signInSchema>;
 const SignInPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [showInactiveDialog, setShowInactiveDialog] = useState(false);
   const navigate = useNavigate();
 
   const form = useForm<SignInFormValues>({
@@ -95,7 +103,25 @@ const SignInPage = () => {
           );
         }
 
-        // If role is valid, redirect to home page
+        // Check user account status
+        const { data: userStatusData, error: statusError } = await supabase
+          .from("users")
+          .select("status")
+          .eq("id", authData.user.id)
+          .single();
+
+        if (statusError) {
+          console.error("Error checking user status:", statusError);
+          // Continue with sign-in if we can't check status
+        } else if (userStatusData && userStatusData.status === "inactive") {
+          // Sign out the user immediately
+          await supabase.auth.signOut();
+          // Show inactive account dialog
+          setShowInactiveDialog(true);
+          return;
+        }
+
+        // If role is valid and account is active, redirect to home page
         navigate("/");
       }
     } catch (error) {
@@ -213,6 +239,28 @@ const SignInPage = () => {
             </div>
           </CardFooter>
         </Card>
+
+        {/* Inactive Account Dialog */}
+        <Dialog open={showInactiveDialog} onOpenChange={setShowInactiveDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-center text-red-600">
+                Akun Tidak Aktif
+              </DialogTitle>
+              <DialogDescription className="text-center pt-4">
+                Akun di Non Aktiv kan, Silahkan hubungi Team Travelintrips
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center pt-4">
+              <Button
+                onClick={() => setShowInactiveDialog(false)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                OK
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
