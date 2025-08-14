@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -172,6 +172,7 @@ export type Database = {
           from_location: Json | null
           id: string
           id_driver: number | null
+          journal_entry_id: string | null
           license_plate: string | null
           make: string | null
           model: string | null
@@ -185,6 +186,7 @@ export type Database = {
           status: Database["public"]["Enums"]["transfer_status"] | null
           to_location: Json | null
           type: string | null
+          user_id: string | null
           vehicle_name: string | null
         }
         Insert: {
@@ -203,6 +205,7 @@ export type Database = {
           from_location?: Json | null
           id: string
           id_driver?: number | null
+          journal_entry_id?: string | null
           license_plate?: string | null
           make?: string | null
           model?: string | null
@@ -216,6 +219,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["transfer_status"] | null
           to_location?: Json | null
           type?: string | null
+          user_id?: string | null
           vehicle_name?: string | null
         }
         Update: {
@@ -234,6 +238,7 @@ export type Database = {
           from_location?: Json | null
           id?: string
           id_driver?: number | null
+          journal_entry_id?: string | null
           license_plate?: string | null
           make?: string | null
           model?: string | null
@@ -247,6 +252,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["transfer_status"] | null
           to_location?: Json | null
           type?: string | null
+          user_id?: string | null
           vehicle_name?: string | null
         }
         Relationships: [
@@ -256,6 +262,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "airport_transfer_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "airport_transfer_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries_with_bookings"
+            referencedColumns: ["journal_entry_id"]
           },
         ]
       }
@@ -642,7 +662,6 @@ export type Database = {
           driver_id: string | null
           driver_name: string | null
           driver_option: string | null
-          drivers_id: string | null
           duration: number | null
           end_date: string | null
           id: string
@@ -695,7 +714,6 @@ export type Database = {
           driver_id?: string | null
           driver_name?: string | null
           driver_option?: string | null
-          drivers_id?: string | null
           duration?: number | null
           end_date?: string | null
           id?: string
@@ -748,7 +766,6 @@ export type Database = {
           driver_id?: string | null
           driver_name?: string | null
           driver_option?: string | null
-          drivers_id?: string | null
           duration?: number | null
           end_date?: string | null
           id?: string
@@ -787,6 +804,13 @@ export type Database = {
           with_driver?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "bookings_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: true
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bookings_vehicle_id_fkey"
             columns: ["vehicle_id"]
@@ -1217,6 +1241,13 @@ export type Database = {
             foreignKeyName: "customers_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "agent_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -1548,7 +1579,15 @@ export type Database = {
           vehicle_year?: string | null
           year?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "drivers_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["role_id"]
+          },
+        ]
       }
       drivers_travelincars: {
         Row: {
@@ -2305,6 +2344,7 @@ export type Database = {
           customer_name: string
           customer_phone: string
           dropoff_area: string | null
+          extra_baggage_count: number | null
           flight_number: string
           id: string
           journal_entry_id: string | null
@@ -2342,6 +2382,7 @@ export type Database = {
           customer_name: string
           customer_phone: string
           dropoff_area?: string | null
+          extra_baggage_count?: number | null
           flight_number: string
           id?: string
           journal_entry_id?: string | null
@@ -2379,6 +2420,7 @@ export type Database = {
           customer_name?: string
           customer_phone?: string
           dropoff_area?: string | null
+          extra_baggage_count?: number | null
           flight_number?: string
           id?: string
           journal_entry_id?: string | null
@@ -2482,6 +2524,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "histori_transaksi_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "histori_transaksi_user_id_fkey"
             columns: ["user_id"]
@@ -3464,6 +3513,7 @@ export type Database = {
         Row: {
           amount: number | null
           amount_paid: number | null
+          bank: string | null
           bank_account_id: string | null
           bank_name: string | null
           booking_id: string | null
@@ -3502,6 +3552,7 @@ export type Database = {
         Insert: {
           amount?: number | null
           amount_paid?: number | null
+          bank?: string | null
           bank_account_id?: string | null
           bank_name?: string | null
           booking_id?: string | null
@@ -3540,6 +3591,7 @@ export type Database = {
         Update: {
           amount?: number | null
           amount_paid?: number | null
+          bank?: string | null
           bank_account_id?: string | null
           bank_name?: string | null
           booking_id?: string | null
@@ -3762,6 +3814,13 @@ export type Database = {
           total_revenue?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "profit_loss_reports_generated_by_fkey"
+            columns: ["generated_by"]
+            isOneToOne: false
+            referencedRelation: "agent_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profit_loss_reports_generated_by_fkey"
             columns: ["generated_by"]
@@ -4159,6 +4218,13 @@ export type Database = {
             foreignKeyName: "fk_staff_user"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_staff_user"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -4197,6 +4263,8 @@ export type Database = {
           proof_url: string | null
           reference_no: string | null
           sender_account: string | null
+          sender_bank: string | null
+          sender_name: string | null
           status: string
           user_id: string
           verified_at: string | null
@@ -4213,6 +4281,8 @@ export type Database = {
           proof_url?: string | null
           reference_no?: string | null
           sender_account?: string | null
+          sender_bank?: string | null
+          sender_name?: string | null
           status?: string
           user_id: string
           verified_at?: string | null
@@ -4229,6 +4299,8 @@ export type Database = {
           proof_url?: string | null
           reference_no?: string | null
           sender_account?: string | null
+          sender_bank?: string | null
+          sender_name?: string | null
           status?: string
           user_id?: string
           verified_at?: string | null
@@ -4442,6 +4514,7 @@ export type Database = {
       }
       users: {
         Row: {
+          account_type: string | null
           address: string | null
           birth_date: string | null
           birth_place: string | null
@@ -4497,6 +4570,7 @@ export type Database = {
           vehicle_year: string | null
         }
         Insert: {
+          account_type?: string | null
           address?: string | null
           birth_date?: string | null
           birth_place?: string | null
@@ -4552,6 +4626,7 @@ export type Database = {
           vehicle_year?: string | null
         }
         Update: {
+          account_type?: string | null
           address?: string | null
           birth_date?: string | null
           birth_place?: string | null
@@ -4620,9 +4695,14 @@ export type Database = {
         Row: {
           device_id: string | null
           full_name: string | null
+          heading: number | null
           id: string
+          last_active: string | null
           latitude: number | null
+          location_zone: string | null
           longitude: number | null
+          role: string | null
+          status: string | null
           updated_at: string | null
           user_email: string | null
           user_id: string | null
@@ -4630,9 +4710,14 @@ export type Database = {
         Insert: {
           device_id?: string | null
           full_name?: string | null
+          heading?: number | null
           id?: string
+          last_active?: string | null
           latitude?: number | null
+          location_zone?: string | null
           longitude?: number | null
+          role?: string | null
+          status?: string | null
           updated_at?: string | null
           user_email?: string | null
           user_id?: string | null
@@ -4640,9 +4725,14 @@ export type Database = {
         Update: {
           device_id?: string | null
           full_name?: string | null
+          heading?: number | null
           id?: string
+          last_active?: string | null
           latitude?: number | null
+          location_zone?: string | null
           longitude?: number | null
+          role?: string | null
+          status?: string | null
           updated_at?: string | null
           user_email?: string | null
           user_id?: string | null
@@ -4794,6 +4884,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vehicles_driver_id_fkey1"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["driver_id"]
+          },
+          {
             foreignKeyName: "vehicles_vehicle_type_id_fkey"
             columns: ["vehicle_type_id"]
             isOneToOne: false
@@ -4907,6 +5004,59 @@ export type Database = {
           user_id: string | null
         }
         Relationships: []
+      }
+      agent_users: {
+        Row: {
+          created_at: string | null
+          education: string | null
+          email: string | null
+          full_name: string | null
+          id: string | null
+          ktp_number: number | null
+          license_number: number | null
+          phone_number: string | null
+          role: string | null
+          role_id: number | null
+          saldo: number | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          education?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string | null
+          ktp_number?: number | null
+          license_number?: number | null
+          phone_number?: string | null
+          role?: string | null
+          role_id?: number | null
+          saldo?: number | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          education?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string | null
+          ktp_number?: number | null
+          license_number?: number | null
+          phone_number?: string | null
+          role?: string | null
+          role_id?: number | null
+          saldo?: number | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_users_roles"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["role_id"]
+          },
+        ]
       }
       bookings_trips_with_user: {
         Row: {
@@ -5140,6 +5290,31 @@ export type Database = {
         }
         Relationships: []
       }
+      v_topup_requests: {
+        Row: {
+          agent_email: string | null
+          agent_full_name: string | null
+          amount: number | null
+          bank_name: string | null
+          created_at: string | null
+          destination_account: string | null
+          id: string | null
+          method: string | null
+          note: string | null
+          proof_url: string | null
+          reference_no: string | null
+          sender_account: string | null
+          sender_bank: string | null
+          sender_name: string | null
+          status: string | null
+          user_id: string | null
+          verified_at: string | null
+          verified_by: string | null
+          verifier_email: string | null
+          verifier_full_name: string | null
+        }
+        Relationships: []
+      }
       view_total_kas: {
         Row: {
           account_code: string | null
@@ -5165,8 +5340,8 @@ export type Database = {
       create_general_ledger_entry: {
         Args: {
           p_account_id: string
-          p_debit: number
           p_credit: number
+          p_debit: number
           p_description: string
         }
         Returns: undefined
@@ -5174,10 +5349,10 @@ export type Database = {
       generate_balance_sheet: {
         Args: { p_period: string }
         Returns: {
-          total_assets: number
-          total_liabilities: number
-          total_equity: number
           is_balanced: boolean
+          total_assets: number
+          total_equity: number
+          total_liabilities: number
         }[]
       }
       generate_ledger_summary: {
@@ -5186,12 +5361,12 @@ export type Database = {
       }
       generate_profit_loss: {
         Args:
-          | { p_period: string }
           | {
-              p_start_date: string
               p_end_date: string
               p_generated_by?: string
+              p_start_date: string
             }
+          | { p_period: string }
         Returns: undefined
       }
       get_account_id_from_service: {
@@ -5213,22 +5388,35 @@ export type Database = {
         }[]
       }
       get_trial_balance_summary: {
-        Args: { p_period_start: string; p_period_end: string }
+        Args: { p_period_end: string; p_period_start: string }
         Returns: {
-          total_debit: number
-          total_credit: number
+          gl_total_credit: number
+          gl_total_debit: number
           is_balanced: boolean
           record_count: number
-          gl_total_debit: number
-          gl_total_credit: number
+          total_credit: number
+          total_debit: number
         }[]
+      }
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       my_function: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      pay_booking_and_set_driver_standby: {
+        Args: {
+          booking_id: string
+          by: string
+          method: string
+          payment_amount: number
+        }
+        Returns: Json
+      }
       populate_trial_balance: {
-        Args: { p_period_start: string; p_period_end: string }
+        Args: { p_period_end: string; p_period_start: string }
         Returns: undefined
       }
       process_journal_entry: {
@@ -5239,12 +5427,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      reject_topup: {
+        Args:
+          | { p_admin: string; p_reason: string; p_request_id: string }
+          | { p_reason: string; p_request_id: string }
+        Returns: undefined
+      }
       sync_trial_balance_with_gl: {
-        Args: { p_period_start: string; p_period_end: string }
+        Args: { p_period_end: string; p_period_start: string }
         Returns: {
           synced_accounts: number
-          total_debit: number
           total_credit: number
+          total_debit: number
         }[]
       }
       test_user_insert: {
@@ -5254,8 +5448,8 @@ export type Database = {
       update_account_balance: {
         Args: {
           p_account_id: string
-          p_debit_amount?: number
           p_credit_amount?: number
+          p_debit_amount?: number
         }
         Returns: boolean
       }
@@ -5285,8 +5479,12 @@ export type Database = {
       }
       upsert_trial_balances: {
         Args:
-          | { account_id: string; period: string; amount: number }
+          | { account_id: string; amount: number; period: string }
           | { payload: string }
+        Returns: undefined
+      }
+      verify_topup: {
+        Args: { p_note?: string; p_request_id: string }
         Returns: undefined
       }
     }

@@ -135,7 +135,12 @@ const DashboardPage = () => {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<
-    "dashboard" | "booking" | "saldo" | "riwayat-transaksi" | "riwayat-topup"
+    | "dashboard"
+    | "booking"
+    | "saldo"
+    | "riwayat-transaksi"
+    | "riwayat-topup"
+    | "total-passenger"
   >("dashboard");
   const [saldo, setSaldo] = useState<number>(0);
   const [loadingSaldo, setLoadingSaldo] = useState<boolean>(true);
@@ -666,6 +671,14 @@ const DashboardPage = () => {
               <DollarSign className="h-5 w-5 mr-3" />
               Riwayat Top Up
             </Button>
+            <Button
+              onClick={() => setActiveMenu("total-passenger")}
+              variant={activeMenu === "total-passenger" ? "default" : "ghost"}
+              className="w-full justify-start text-left hover:bg-green-50 hover:text-green-700"
+            >
+              <Users className="h-5 w-5 mr-3" />
+              Total Passenger
+            </Button>
           </div>
         </nav>
 
@@ -723,6 +736,7 @@ const DashboardPage = () => {
                   {activeMenu === "saldo" && "Kelola Saldo"}
                   {activeMenu === "riwayat-transaksi" && "Riwayat Transaksi"}
                   {activeMenu === "riwayat-topup" && "Riwayat Top Up"}
+                  {activeMenu === "total-passenger" && "Total Passenger"}
                 </h1>
               </div>
               <div className="flex items-center space-x-4">
@@ -742,7 +756,10 @@ const DashboardPage = () => {
             <>
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+                  onClick={() => setActiveMenu("booking")}
+                >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
                       Total Pesanan
@@ -757,7 +774,10 @@ const DashboardPage = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+                  onClick={() => setActiveMenu("booking")}
+                >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
                       Pesanan Aktif
@@ -777,7 +797,10 @@ const DashboardPage = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+                  onClick={() => setActiveMenu("total-passenger")}
+                >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
                       Total Passenger
@@ -794,7 +817,10 @@ const DashboardPage = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+                  onClick={() => setActiveMenu("riwayat-transaksi")}
+                >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
                       Total Pendapatan
@@ -1806,6 +1832,116 @@ const DashboardPage = () => {
                   </div>
                 </CardContent>
               </Card>
+            </>
+          )}
+
+          {activeMenu === "total-passenger" && (
+            <>
+              {/* Passenger Analytics Dashboard */}
+              <div className="space-y-8">
+                {/* Main Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-6">
+                  {/* Total Passengers Card */}
+                  <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium opacity-90">
+                        Total Passenger
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold mb-2">
+                        {orders
+                          .filter((order) => order.status === "completed")
+                          .reduce((sum, order) => sum + order.participants, 0)}
+                      </div>
+                      <div className="flex items-center text-sm opacity-90">
+                        <Users className="h-4 w-4 mr-1" />
+                        Passenger selesai
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Detailed Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+                  {/* Monthly Breakdown */}
+                  <Card className="shadow-lg">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center">
+                        <Users className="h-5 w-5 mr-2 text-green-600" />
+                        Breakdown by Status
+                      </CardTitle>
+                      <CardDescription>
+                        Distribusi passenger berdasarkan status pesanan
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
+                            <span className="text-sm font-medium">Selesai</span>
+                          </div>
+                          <span className="text-lg font-bold text-green-600">
+                            {orders
+                              .filter((order) => order.status === "completed")
+                              .reduce(
+                                (sum, order) => sum + order.participants,
+                                0,
+                              )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                            <span className="text-sm font-medium">
+                              Dikonfirmasi
+                            </span>
+                          </div>
+                          <span className="text-lg font-bold text-blue-600">
+                            {orders
+                              .filter((order) => order.status === "confirmed")
+                              .reduce(
+                                (sum, order) => sum + order.participants,
+                                0,
+                              )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                            <span className="text-sm font-medium">Pending</span>
+                          </div>
+                          <span className="text-lg font-bold text-orange-600">
+                            {orders
+                              .filter((order) => order.status === "pending")
+                              .reduce(
+                                (sum, order) => sum + order.participants,
+                                0,
+                              )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 bg-red-500 rounded-full mr-3"></div>
+                            <span className="text-sm font-medium">
+                              Dibatalkan
+                            </span>
+                          </div>
+                          <span className="text-lg font-bold text-red-600">
+                            {orders
+                              .filter((order) => order.status === "cancelled")
+                              .reduce(
+                                (sum, order) => sum + order.participants,
+                                0,
+                              )}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
             </>
           )}
         </main>

@@ -1387,7 +1387,6 @@ const BookingFormGroup = () => {
                                             </div>
                                           ) : price ? (
                                             <div className="flex items-center text-sm font-semibold text-green-600">
-                                              <DollarSign className="h-3 w-3 mr-1" />
                                               {formatCurrency(price)}
                                             </div>
                                           ) : (

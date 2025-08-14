@@ -8,6 +8,7 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import {
   Card,
   CardContent,
@@ -27,31 +28,64 @@ import {
 } from "./ui/form";
 import { Separator } from "./ui/separator";
 import TermsAndConditionsModal from "./TermsAndConditionsModal";
-import { AlertCircle, CheckCircle2, Loader2, MapPin } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  Upload,
+} from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { supabase } from "../lib/supabase";
 
-const formSchema = z.object({
-  // Agency Details
-  nama_perusahaan: z
-    .string()
-    .min(2, { message: "Nama perusahaan harus minimal 2 karakter" }),
+const formSchema = z
+  .object({
+    // Agency Details
+    nama_perusahaan: z
+      .string()
+      .min(2, { message: "Nama perusahaan harus minimal 2 karakter" }),
+    account_type: z.enum(["Personal", "Corporate"], {
+      required_error: "Please select an account type",
+    }),
 
-  // Personal Information
-  full_name: z.string().min(2, { message: "Full name is required" }),
-  email: z.string().email({ message: "Please provide a valid email address" }),
-  phone_number: z
-    .string()
-    .min(8, { message: "Please provide a valid phone number" }),
-  password: z
-    .string()
-    .min(6, { message: "Password must be at least 6 characters" }),
+    // Personal Information
+    full_name: z.string().min(2, { message: "Full name is required" }),
+    email: z
+      .string()
+      .email({ message: "Please provide a valid email address" }),
+    phone_number: z
+      .string()
+      .min(8, { message: "Please provide a valid phone number" }),
+    password: z
+      .string()
+      .min(6, { message: "Password must be at least 6 characters" }),
 
-  // Terms and Conditions
-  termsAccepted: z.boolean().refine((val) => val === true, {
-    message: "You must accept the terms and conditions",
-  }),
-});
+    // Corporate File Uploads (conditional)
+    ktp_file: z.any().optional(),
+    siup_file: z.any().optional(),
+    nib_file: z.any().optional(),
+    npwp_file: z.any().optional(),
+
+    // Terms and Conditions
+    termsAccepted: z.boolean().refine((val) => val === true, {
+      message: "You must accept the terms and conditions",
+    }),
+  })
+  .refine(
+    (data) => {
+      // If Corporate account type, require file uploads
+      if (data.account_type === "Corporate") {
+        return (
+          data.ktp_file && data.siup_file && data.nib_file && data.npwp_file
+        );
+      }
+      return true;
+    },
+    {
+      message: "All document files are required for Corporate accounts",
+      path: ["ktp_file"],
+    },
+  );
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -65,19 +99,89 @@ const AgentRegistrationForm = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       nama_perusahaan: "",
+      account_type: "Personal" as "Personal" | "Corporate",
       full_name: "",
       email: "",
       phone_number: "",
       password: "",
+      ktp_file: null,
+      siup_file: null,
+      nib_file: null,
+      npwp_file: null,
       termsAccepted: false,
     },
   });
+
+  const uploadFile = async (file: File, fileName: string): Promise<string> => {
+    const fileExt = file.name.split(".").pop();
+    const filePath = `agent-documents/${Date.now()}-${fileName}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from("documents")
+      .upload(filePath, file);
+
+    if (error) {
+      throw new Error(`Failed to upload ${fileName}: ${error.message}`);
+    }
+
+    // Get public URL
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("documents").getPublicUrl(filePath);
+
+    return publicUrl;
+  };
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
+      let fileUrls: Record<string, string> = {};
+
+      // Upload files if Corporate account type
+      if (data.account_type === "Corporate") {
+        const fileUploads = [];
+
+        if (data.ktp_file && data.ktp_file[0]) {
+          fileUploads.push(
+            uploadFile(data.ktp_file[0], "ktp").then((url) => ({
+              ktp_file_url: url,
+            })),
+          );
+        }
+
+        if (data.siup_file && data.siup_file[0]) {
+          fileUploads.push(
+            uploadFile(data.siup_file[0], "siup").then((url) => ({
+              siup_file_url: url,
+            })),
+          );
+        }
+
+        if (data.nib_file && data.nib_file[0]) {
+          fileUploads.push(
+            uploadFile(data.nib_file[0], "nib").then((url) => ({
+              nib_file_url: url,
+            })),
+          );
+        }
+
+        if (data.npwp_file && data.npwp_file[0]) {
+          fileUploads.push(
+            uploadFile(data.npwp_file[0], "npwp").then((url) => ({
+              npwp_file_url: url,
+            })),
+          );
+        }
+
+        const uploadResults = await Promise.all(fileUploads);
+        fileUrls = uploadResults.reduce(
+          (acc, result) => ({ ...acc, ...result }),
+          {},
+        );
+      }
+
       // First, create the user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
@@ -87,6 +191,7 @@ const AgentRegistrationForm = () => {
             full_name: data.full_name,
             phone_number: data.phone_number,
             nama_perusahaan: data.nama_perusahaan,
+            account_type: data.account_type,
             role: "Agent",
             role_id: 11,
           },
@@ -108,8 +213,10 @@ const AgentRegistrationForm = () => {
           email: data.email,
           phone_number: data.phone_number,
           nama_perusahaan: data.nama_perusahaan,
+          account_type: data.account_type,
           role_id: 11, // Agent role ID from roles table
           role: "Agent",
+          ...fileUrls, // Add file URLs if Corporate account
         };
 
         console.log("Attempting to insert user data:", registrationData);
@@ -252,6 +359,39 @@ const AgentRegistrationForm = () => {
                         </FormItem>
                       )}
                     />
+
+                    <FormField
+                      control={form.control}
+                      name="account_type"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Account Type*</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem
+                                  value="Personal"
+                                  id="personal"
+                                />
+                                <Label htmlFor="personal">Personal</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem
+                                  value="Corporate"
+                                  id="corporate"
+                                />
+                                <Label htmlFor="corporate">Corporate</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 </div>
 
@@ -313,6 +453,120 @@ const AgentRegistrationForm = () => {
                         )}
                       />
                     </div>
+
+                    {/* Corporate Document Uploads */}
+                    {form.watch("account_type") === "Corporate" && (
+                      <>
+                        <Separator className="my-6" />
+                        <div>
+                          <h4 className="text-md font-semibold mb-4 flex items-center">
+                            <Upload className="w-4 h-4 mr-2" />
+                            Required Documents for Corporate Account
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="ktp_file"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>KTP (ID Card)*</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload KTP in PDF, JPG, or PNG format
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="siup_file"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    SIUP (Business License)*
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload SIUP in PDF, JPG, or PNG format
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="nib_file"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    NIB (Business Identification Number)*
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload NIB in PDF, JPG, or PNG format
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="npwp_file"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>NPWP (Tax ID)*</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload NPWP in PDF, JPG, or PNG format
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
