@@ -60,11 +60,20 @@ const formSchema = z
       .string()
       .min(6, { message: "Password must be at least 6 characters" }),
 
+    // Personal File Uploads (conditional)
+    ktp_file_personal: z.any().optional(),
+    kk_file_personal: z.any().optional(),
+
     // Corporate File Uploads (conditional)
     ktp_file: z.any().optional(),
     siup_file: z.any().optional(),
     nib_file: z.any().optional(),
     npwp_file: z.any().optional(),
+
+    // Selfie Upload (required for all account types)
+    selfie_file: z.any().refine((files) => files && files.length > 0, {
+      message: "Foto selfie wajib diupload",
+    }),
 
     // Terms and Conditions
     termsAccepted: z.boolean().refine((val) => val === true, {
@@ -73,6 +82,10 @@ const formSchema = z
   })
   .refine(
     (data) => {
+      // If Personal account type, require KTP and KK uploads
+      if (data.account_type === "Personal") {
+        return data.ktp_file_personal && data.kk_file_personal;
+      }
       // If Corporate account type, require file uploads
       if (data.account_type === "Corporate") {
         return (
@@ -82,8 +95,9 @@ const formSchema = z
       return true;
     },
     {
-      message: "All document files are required for Corporate accounts",
-      path: ["ktp_file"],
+      message:
+        "KTP and KK files are required for Personal accounts, all document files are required for Corporate accounts",
+      path: ["ktp_file_personal"],
     },
   );
 
@@ -104,10 +118,13 @@ const AgentRegistrationForm = () => {
       email: "",
       phone_number: "",
       password: "",
+      ktp_file_personal: null,
+      kk_file_personal: null,
       ktp_file: null,
       siup_file: null,
       nib_file: null,
       npwp_file: null,
+      selfie_file: null,
       termsAccepted: false,
     },
   });
@@ -139,8 +156,38 @@ const AgentRegistrationForm = () => {
     try {
       let fileUrls: Record<string, string> = {};
 
-      // Upload files if Corporate account type
-      if (data.account_type === "Corporate") {
+      // Upload selfie file (required for all account types)
+      if (data.selfie_file && data.selfie_file[0]) {
+        const selfieUrl = await uploadFile(data.selfie_file[0], "selfie");
+        fileUrls.selfie_url = selfieUrl;
+      }
+
+      // Upload files based on account type
+      if (data.account_type === "Personal") {
+        const fileUploads = [];
+
+        if (data.ktp_file_personal && data.ktp_file_personal[0]) {
+          fileUploads.push(
+            uploadFile(data.ktp_file_personal[0], "ktp").then((url) => ({
+              ktp_url: url,
+            })),
+          );
+        }
+
+        if (data.kk_file_personal && data.kk_file_personal[0]) {
+          fileUploads.push(
+            uploadFile(data.kk_file_personal[0], "kk").then((url) => ({
+              kk_url: url,
+            })),
+          );
+        }
+
+        const uploadResults = await Promise.all(fileUploads);
+        fileUrls = uploadResults.reduce(
+          (acc, result) => ({ ...acc, ...result }),
+          fileUrls,
+        );
+      } else if (data.account_type === "Corporate") {
         const fileUploads = [];
 
         if (data.ktp_file && data.ktp_file[0]) {
@@ -178,7 +225,7 @@ const AgentRegistrationForm = () => {
         const uploadResults = await Promise.all(fileUploads);
         fileUrls = uploadResults.reduce(
           (acc, result) => ({ ...acc, ...result }),
-          {},
+          fileUrls,
         );
       }
 
@@ -453,6 +500,102 @@ const AgentRegistrationForm = () => {
                         )}
                       />
                     </div>
+
+                    {/* Selfie Upload - Required for all account types */}
+                    <div>
+                      <h4 className="text-md font-semibold mb-4 flex items-center">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Foto Selfie (Wajib)
+                      </h4>
+                      <FormField
+                        control={form.control}
+                        name="selfie_file"
+                        render={({ field: { onChange, value, ...field } }) => (
+                          <FormItem>
+                            <FormLabel>Upload Foto Selfie*</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="file"
+                                accept=".jpg,.jpeg,.png"
+                                onChange={(e) => onChange(e.target.files)}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Upload foto selfie dalam format JPG, JPEG, atau
+                              PNG
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Personal Document Uploads */}
+                    {form.watch("account_type") === "Personal" && (
+                      <>
+                        <Separator className="my-6" />
+                        <div>
+                          <h4 className="text-md font-semibold mb-4 flex items-center">
+                            <Upload className="w-4 h-4 mr-2" />
+                            Dokumen Wajib untuk Akun Personal
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="ktp_file_personal"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    KTP (Kartu Tanda Penduduk)*
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload KTP dalam format PDF, JPG, JPEG, atau
+                                    PNG
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="kk_file_personal"
+                              render={({
+                                field: { onChange, value, ...field },
+                              }) => (
+                                <FormItem>
+                                  <FormLabel>KK (Kartu Keluarga)*</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => onChange(e.target.files)}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload KK dalam format PDF, JPG, JPEG, atau
+                                    PNG
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     {/* Corporate Document Uploads */}
                     {form.watch("account_type") === "Corporate" && (

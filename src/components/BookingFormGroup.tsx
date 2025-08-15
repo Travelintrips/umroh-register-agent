@@ -298,6 +298,10 @@ const BookingFormGroup = () => {
           ? "Paid"
           : "tunggu konfirmasi Admin";
 
+      // Determine booking status based on payment method
+      const bookingStatus =
+        selectedPaymentMethod === "use_saldo" ? "completed" : "pending";
+
       // Get selected bank name if bank transfer is selected
       const selectedBank = bankTransferMethods.find(
         (bank) => bank.id.toString() === selectedBankMethod,
@@ -325,7 +329,7 @@ const BookingFormGroup = () => {
         additional_notes: formData.catatan_tambahan,
         price: totalServicePrice, // Basic price (subtotal per penumpang)
         total_amount: totalAmount, // This was already correct
-        status: "Menunggu Konfirmasi",
+        status: bookingStatus,
         code_booking: generatedBookingCode,
         created_at: new Date().toISOString(),
         payment_id:
@@ -775,19 +779,21 @@ const BookingFormGroup = () => {
 
           <Separator />
 
-          {/* Status */}
-          <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center justify-center mb-2">
-              <Clock className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="font-semibold text-yellow-800">
-                Status: Menunggu Konfirmasi
-              </span>
+          {/* Status - Only show for bank_transfer */}
+          {selectedPaymentMethod === "bank_transfer" && (
+            <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-center mb-2">
+                <Clock className="h-5 w-5 text-yellow-600 mr-2" />
+                <span className="font-semibold text-yellow-800">
+                  Status: Menunggu Konfirmasi
+                </span>
+              </div>
+              <p className="text-sm text-yellow-700">
+                Tim kami akan menghubungi Anda dalam 1x24 jam untuk konfirmasi
+                pesanan
+              </p>
             </div>
-            <p className="text-sm text-yellow-700">
-              Tim kami akan menghubungi Anda dalam 1x24 jam untuk konfirmasi
-              pesanan
-            </p>
-          </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex justify-between pt-6">

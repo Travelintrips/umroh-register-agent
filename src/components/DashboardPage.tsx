@@ -53,6 +53,9 @@ import {
 
 type HandlingBooking = Tables<"handling_bookings"> & {
   bank_name?: string;
+  destination_account?: string;
+  sender_account?: string;
+  sender_bank?: string;
 };
 
 type PaymentMethod = Tables<"payment_methods">;
@@ -165,6 +168,8 @@ const DashboardPage = () => {
   const [loadingTopUpHistory, setLoadingTopUpHistory] = useState(false);
 
   const [bookingCodeFilter, setBookingCodeFilter] = useState("");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const navigate = useNavigate();
 
@@ -355,7 +360,7 @@ const DashboardPage = () => {
     try {
       setLoadingTopUpHistory(true);
       const { data, error } = await supabase
-        .from("topup_requests")
+        .from("v_topup_requests")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
@@ -423,7 +428,7 @@ const DashboardPage = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Filter orders based on booking code
+  // Filter orders based on booking code, payment method, and status
   useEffect(() => {
     let filtered = [...orders];
 
@@ -434,8 +439,32 @@ const DashboardPage = () => {
       );
     }
 
+    // Filter by payment method
+    if (paymentMethodFilter) {
+      filtered = filtered.filter((order) => {
+        const paymentMethod = order.payment_method?.toLowerCase() || "";
+        switch (paymentMethodFilter) {
+          case "cash":
+            return paymentMethod === "cash";
+          case "bank_transfer":
+            return paymentMethod === "bank_transfer";
+          case "saldo":
+            return paymentMethod === "use_saldo";
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Filter by status
+    if (statusFilter) {
+      filtered = filtered.filter((order) => {
+        return order.status === statusFilter;
+      });
+    }
+
     setFilteredOrders(filtered);
-  }, [orders, bookingCodeFilter]);
+  }, [orders, bookingCodeFilter, paymentMethodFilter, statusFilter]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -481,27 +510,76 @@ const DashboardPage = () => {
       (booking) => (booking.code_booking || booking.id) === order.id,
     );
 
-    // Fetch bank name from payments table if payment method is bank_transfer
+    // Fetch bank details from payments table if payment method is bank_transfer
     let bankName = "";
+    let destinationAccount = "";
+    let senderAccount = "";
+    let senderBank = "";
+
     if (originalBooking?.payment_method === "bank_transfer") {
       // First try to get bank name from handling_bookings table
       if (originalBooking?.bank_name) {
         bankName = originalBooking.bank_name;
       }
+
+      // Try to get bank details from handling_bookings table first
+      if (originalBooking?.destination_account) {
+        destinationAccount = originalBooking.destination_account;
+      }
+      if (originalBooking?.sender_account) {
+        senderAccount = originalBooking.sender_account;
+      }
+      if (originalBooking?.sender_bank) {
+        senderBank = originalBooking.sender_bank;
+      }
+
       // If not found and payment_id exists, try payments table
-      else if (originalBooking?.payment_id) {
+      if (
+        originalBooking?.payment_id &&
+        (!destinationAccount || !senderAccount || !senderBank)
+      ) {
         try {
           const { data: paymentData, error } = await supabase
             .from("payments")
-            .select("bank_name")
+            .select(
+              "bank_name, destination_account, sender_account, sender_bank",
+            )
             .eq("id", originalBooking.payment_id)
             .single();
 
           if (!error && paymentData) {
-            bankName = paymentData.bank_name || "";
+            bankName = bankName || paymentData.bank_name || "";
+            destinationAccount =
+              destinationAccount ||
+              String(paymentData.destination_account || "");
+            senderAccount = senderAccount || paymentData.sender_account || "";
+            senderBank = senderBank || paymentData.sender_bank || "";
           }
         } catch (error) {
-          console.error("Error fetching bank name:", error);
+          console.error("Error fetching bank details:", error);
+        }
+      }
+
+      // If still no data, try to get from the booking code in handling_bookings
+      if (!destinationAccount || !senderAccount || !senderBank) {
+        try {
+          const { data: bookingData, error } = await supabase
+            .from("handling_bookings")
+            .select(
+              "bank_name, destination_account, sender_account, sender_bank",
+            )
+            .eq("code_booking", order.id)
+            .single();
+
+          if (!error && bookingData) {
+            bankName = bankName || bookingData.bank_name || "";
+            destinationAccount =
+              destinationAccount || bookingData.destination_account || "";
+            senderAccount = senderAccount || bookingData.sender_account || "";
+            senderBank = senderBank || bookingData.sender_bank || "";
+          }
+        } catch (error) {
+          console.error("Error fetching booking bank details:", error);
         }
       }
     }
@@ -512,12 +590,13 @@ const DashboardPage = () => {
       pickup_area: originalBooking?.pickup_area || "N/A",
       dropoff_area: originalBooking?.dropoff_area || "N/A",
       flight_number: originalBooking?.flight_number || "N/A",
-      customer_phone: originalBooking?.customer_phone || "N/A",
-      customer_email: originalBooking?.customer_email || "N/A",
       bank_name: bankName,
+      destination_account: destinationAccount,
+      sender_account: senderAccount,
+      sender_bank: senderBank,
     };
 
-    console.log("Enhanced order with bank name:", enhancedOrder); // Debug log
+    console.log("Enhanced order with bank details:", enhancedOrder); // Debug log
     setSelectedOrder(enhancedOrder);
     setViewModalOpen(true);
   };
@@ -842,9 +921,7 @@ const DashboardPage = () => {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-xl">Pesanan Terbaru</CardTitle>
-                  <CardDescription>
-                    5 pesanan terbaru dari jamaah Anda
-                  </CardDescription>
+                  <CardDescription>5 pesanan terbaru Anda</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
@@ -919,11 +996,12 @@ const DashboardPage = () => {
                     Filter Pencarian
                   </CardTitle>
                   <CardDescription>
-                    Filter pesanan berdasarkan kode booking
+                    Filter pesanan berdasarkan kode booking, metode pembayaran,
+                    dan status
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
                     {/* Booking Code Filter */}
                     <div className="space-y-2">
                       <label className="text-sm font-medium">
@@ -935,6 +1013,42 @@ const DashboardPage = () => {
                         onChange={(e) => setBookingCodeFilter(e.target.value)}
                         className="w-full"
                       />
+                    </div>
+
+                    {/* Payment Method Filter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Metode Pembayaran
+                      </label>
+                      <select
+                        value={paymentMethodFilter}
+                        onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                      >
+                        <option value="">Semua Metode</option>
+                        <option value="cash">Cash</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="saldo">Saldo</option>
+                      </select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        Status Pesanan
+                      </label>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                      >
+                        <option value="">Semua Status</option>
+
+                        <option value="pending">Menunggu</option>
+                        <option value="confirmed">Dikonfirmasi</option>
+                        <option value="completed">Selesai</option>
+                        <option value="cancelled">Dibatalkan</option>
+                      </select>
                     </div>
 
                     {/* Download Button */}
@@ -959,6 +1073,8 @@ const DashboardPage = () => {
                     <Button
                       onClick={() => {
                         setBookingCodeFilter("");
+                        setPaymentMethodFilter("");
+                        setStatusFilter("");
                       }}
                       variant="ghost"
                       size="sm"
@@ -1041,8 +1157,8 @@ const DashboardPage = () => {
                 <CardHeader>
                   <CardTitle className="text-xl">Semua Pesanan</CardTitle>
                   <CardDescription>
-                    Kelola semua pesanan layanan handling bandara dari jamaah
-                    Anda ({filteredOrders.length} dari {orders.length} pesanan)
+                    Kelola semua pesanan layanan handling bandara Anda (
+                    {filteredOrders.length} dari {orders.length} pesanan)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1088,7 +1204,11 @@ const DashboardPage = () => {
                                   {order.participants} orang
                                 </TableCell>
                                 <TableCell>
-                                  {order.payment_method || "N/A"}
+                                  {order.payment_method === "bank_transfer"
+                                    ? "Bank Transfer"
+                                    : order.payment_method === "use_saldo"
+                                      ? "Saldo"
+                                      : order.payment_method || "N/A"}
                                 </TableCell>
                                 <TableCell>
                                   <Badge
@@ -1103,7 +1223,7 @@ const DashboardPage = () => {
                                     {order.status === "completed"
                                       ? "Lunas"
                                       : order.status === "confirmed"
-                                        ? "Dibayar"
+                                        ? "Belum Bayar"
                                         : "Belum Bayar"}
                                   </Badge>
                                 </TableCell>
@@ -1677,6 +1797,7 @@ const DashboardPage = () => {
                           <TableHead>Tanggal</TableHead>
                           <TableHead>ID Booking</TableHead>
                           <TableHead>Deskripsi</TableHead>
+                          <TableHead>Saldo Awal</TableHead>
                           <TableHead>Jumlah Dipotong</TableHead>
                           <TableHead>Saldo Setelah</TableHead>
                           <TableHead>Status</TableHead>
@@ -1691,37 +1812,49 @@ const DashboardPage = () => {
                             </TableCell>
                           </TableRow>
                         ) : transactionHistory.length > 0 ? (
-                          transactionHistory.map((transaction) => (
-                            <TableRow key={transaction.id}>
-                              <TableCell>
-                                {transaction.trans_date
-                                  ? formatDate(transaction.trans_date)
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {transaction.kode_booking || "N/A"}
-                              </TableCell>
-                              <TableCell>
-                                {buildTxnDescription(
-                                  transaction,
-                                  handlingBookings,
-                                )}
-                              </TableCell>
-                              <TableCell className="text-red-600 font-medium">
-                                {formatCurrency(Math.abs(transaction.nominal))}
-                              </TableCell>
-                              <TableCell>
-                                {formatCurrency(transaction.saldo_akhir)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="default">Berhasil</Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                          transactionHistory.map((transaction) => {
+                            // Calculate initial balance (saldo awal) by adding back the deducted amount
+                            const saldoAwal =
+                              transaction.saldo_akhir +
+                              Math.abs(transaction.nominal);
+
+                            return (
+                              <TableRow key={transaction.id}>
+                                <TableCell>
+                                  {transaction.trans_date
+                                    ? formatDate(transaction.trans_date)
+                                    : "N/A"}
+                                </TableCell>
+                                <TableCell className="font-mono">
+                                  {transaction.kode_booking || "N/A"}
+                                </TableCell>
+                                <TableCell>
+                                  {buildTxnDescription(
+                                    transaction,
+                                    handlingBookings,
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(saldoAwal)}
+                                </TableCell>
+                                <TableCell className="text-red-600 font-medium">
+                                  {formatCurrency(
+                                    Math.abs(transaction.nominal),
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(transaction.saldo_akhir)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="default">Berhasil</Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={6}
+                              colSpan={7}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada riwayat transaksi
@@ -1754,73 +1887,89 @@ const DashboardPage = () => {
                           <TableHead>Tanggal</TableHead>
                           <TableHead>ID Transaksi</TableHead>
                           <TableHead>Metode Pembayaran</TableHead>
+                          <TableHead>Saldo Awal</TableHead>
                           <TableHead>Jumlah Top Up</TableHead>
+                          <TableHead>Saldo Akhir</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {loadingTopUpHistory ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-8">
+                            <TableCell colSpan={7} className="text-center py-8">
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
                               Loading...
                             </TableCell>
                           </TableRow>
                         ) : topUpHistory.length > 0 ? (
-                          topUpHistory.map((topup) => (
-                            <TableRow key={topup.id}>
-                              <TableCell>
-                                {topup.created_at
-                                  ? formatDate(topup.created_at)
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {topup.reference_no || topup.id.slice(0, 8)}
-                              </TableCell>
-                              <TableCell>
-                                <div>
-                                  <div className="font-medium">
-                                    {topup.method === "bank_transfer"
-                                      ? "Bank Transfer"
-                                      : topup.method === "paylabs"
-                                        ? "Paylabs"
-                                        : topup.method}
-                                  </div>
-                                  {topup.bank_name && (
-                                    <div className="text-sm text-gray-600">
-                                      {topup.bank_name}
+                          topUpHistory.map((topup, index) => {
+                            return (
+                              <TableRow key={topup.id}>
+                                <TableCell>
+                                  {topup.created_at
+                                    ? formatDate(topup.created_at)
+                                    : "N/A"}
+                                </TableCell>
+                                <TableCell className="font-mono">
+                                  {topup.reference_no || topup.id.slice(0, 8)}
+                                </TableCell>
+                                <TableCell>
+                                  <div>
+                                    <div className="font-medium">
+                                      {topup.method === "bank_transfer"
+                                        ? "Bank Transfer"
+                                        : topup.method === "paylabs"
+                                          ? "Paylabs"
+                                          : topup.method}
                                     </div>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-green-600 font-medium">
-                                +{formatCurrency(topup.amount)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    topup.status === "approved"
-                                      ? "default"
+                                    {topup.bank_name && (
+                                      <div className="text-sm text-gray-600">
+                                        {topup.bank_name}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {topup.saldo_awal !== null &&
+                                  topup.saldo_awal !== undefined
+                                    ? formatCurrency(topup.saldo_awal)
+                                    : "-"}
+                                </TableCell>
+                                <TableCell className="text-green-600 font-medium">
+                                  +{formatCurrency(topup.amount)}
+                                </TableCell>
+                                <TableCell>
+                                  {topup.saldo_akhir !== null &&
+                                  topup.saldo_akhir !== undefined
+                                    ? formatCurrency(topup.saldo_akhir)
+                                    : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      topup.status === "approved"
+                                        ? "default"
+                                        : topup.status === "pending"
+                                          ? "secondary"
+                                          : "destructive"
+                                    }
+                                  >
+                                    {topup.status === "approved"
+                                      ? "Berhasil"
                                       : topup.status === "pending"
-                                        ? "secondary"
-                                        : "destructive"
-                                  }
-                                >
-                                  {topup.status === "approved"
-                                    ? "Berhasil"
-                                    : topup.status === "pending"
-                                      ? "Menunggu"
-                                      : topup.status === "rejected"
-                                        ? "Ditolak"
-                                        : topup.status}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                                        ? "Menunggu"
+                                        : topup.status === "rejected"
+                                          ? "Ditolak"
+                                          : topup.status}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={5}
+                              colSpan={7}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada riwayat top up
@@ -1990,6 +2139,17 @@ const DashboardPage = () => {
                 </div>
               </div>
 
+              {(selectedOrder as any).flight_number && (
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Nomor Penerbangan
+                  </label>
+                  <p className="text-sm">
+                    {(selectedOrder as any).flight_number}
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">
@@ -2040,7 +2200,13 @@ const DashboardPage = () => {
                     Payment Method
                   </label>
                   <div className="text-sm">
-                    <p>{selectedOrder.payment_method || "N/A"}</p>
+                    <p>
+                      {selectedOrder.payment_method === "bank_transfer"
+                        ? "Bank Transfer"
+                        : selectedOrder.payment_method === "use_saldo"
+                          ? "Saldo"
+                          : selectedOrder.payment_method || "N/A"}
+                    </p>
                     {selectedOrder.payment_method === "bank_transfer" &&
                       (selectedOrder as any).bank_name && (
                         <p className="text-gray-600 mt-1">
@@ -2070,37 +2236,41 @@ const DashboardPage = () => {
                 </div>
               </div>
 
-              {(selectedOrder as any).customer_phone && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    No. Telepon Customer
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).customer_phone}
-                  </p>
-                </div>
-              )}
+              {selectedOrder.payment_method === "bank_transfer" && (
+                <>
+                  {(selectedOrder as any).destination_account && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">
+                        No Bank Tujuan
+                      </label>
+                      <p className="text-sm">
+                        {(selectedOrder as any).destination_account}
+                      </p>
+                    </div>
+                  )}
 
-              {(selectedOrder as any).customer_email && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Email Customer
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).customer_email}
-                  </p>
-                </div>
-              )}
+                  {(selectedOrder as any).sender_account && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">
+                        Rekening Pengirim
+                      </label>
+                      <p className="text-sm">
+                        {(selectedOrder as any).sender_account}
+                      </p>
+                    </div>
+                  )}
 
-              {(selectedOrder as any).flight_number && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Nomor Penerbangan
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).flight_number}
-                  </p>
-                </div>
+                  {(selectedOrder as any).sender_bank && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">
+                        Bank Pengirim
+                      </label>
+                      <p className="text-sm">
+                        {(selectedOrder as any).sender_bank}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
