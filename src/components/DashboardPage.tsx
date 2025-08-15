@@ -144,6 +144,7 @@ const DashboardPage = () => {
     | "riwayat-transaksi"
     | "riwayat-topup"
     | "total-passenger"
+    | "profile"
   >("dashboard");
   const [saldo, setSaldo] = useState<number>(0);
   const [loadingSaldo, setLoadingSaldo] = useState<boolean>(true);
@@ -166,6 +167,8 @@ const DashboardPage = () => {
   const [loadingTransactionHistory, setLoadingTransactionHistory] =
     useState(false);
   const [loadingTopUpHistory, setLoadingTopUpHistory] = useState(false);
+  const [agentProfile, setAgentProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   const [bookingCodeFilter, setBookingCodeFilter] = useState("");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
@@ -378,6 +381,28 @@ const DashboardPage = () => {
     }
   };
 
+  const fetchAgentProfile = async (userId: string) => {
+    try {
+      setLoadingProfile(true);
+      const { data, error } = await supabase
+        .from("agent_users")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching agent profile:", error);
+        return;
+      }
+
+      setAgentProfile(data);
+    } catch (error) {
+      console.error("Error in fetchAgentProfile:", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
   useEffect(() => {
     // Fetch bank methods on component mount
     fetchBankMethods();
@@ -394,6 +419,7 @@ const DashboardPage = () => {
         fetchUserSaldo(session.user.id);
         fetchTransactionHistory(session.user.id);
         fetchTopUpHistory(session.user.id);
+        fetchAgentProfile(session.user.id);
 
         // Auto-populate sender name with user's full name
         const userFullName =
@@ -417,6 +443,7 @@ const DashboardPage = () => {
         fetchUserSaldo(session.user.id);
         fetchTransactionHistory(session.user.id);
         fetchTopUpHistory(session.user.id);
+        fetchAgentProfile(session.user.id);
 
         // Auto-populate sender name with user's full name
         const userFullName =
@@ -758,6 +785,14 @@ const DashboardPage = () => {
               <Users className="h-5 w-5 mr-3" />
               Total Passenger
             </Button>
+            <Button
+              onClick={() => setActiveMenu("profile")}
+              variant={activeMenu === "profile" ? "default" : "ghost"}
+              className="w-full justify-start text-left hover:bg-green-50 hover:text-green-700"
+            >
+              <Users className="h-5 w-5 mr-3" />
+              Profile
+            </Button>
           </div>
         </nav>
 
@@ -816,6 +851,7 @@ const DashboardPage = () => {
                   {activeMenu === "riwayat-transaksi" && "Riwayat Transaksi"}
                   {activeMenu === "riwayat-topup" && "Riwayat Top Up"}
                   {activeMenu === "total-passenger" && "Total Passenger"}
+                  {activeMenu === "profile" && "Profile Agent"}
                 </h1>
               </div>
               <div className="flex items-center space-x-4">
@@ -1223,7 +1259,7 @@ const DashboardPage = () => {
                                     {order.status === "completed"
                                       ? "Lunas"
                                       : order.status === "confirmed"
-                                        ? "Belum Bayar"
+                                        ? "Dibayar"
                                         : "Belum Bayar"}
                                   </Badge>
                                 </TableCell>
@@ -2091,6 +2127,212 @@ const DashboardPage = () => {
                   </Card>
                 </div>
               </div>
+            </>
+          )}
+
+          {activeMenu === "profile" && (
+            <>
+              {/* Profile Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center">
+                    <Users className="h-6 w-6 mr-2 text-green-600" />
+                    Informasi Profile Agent
+                  </CardTitle>
+                  <CardDescription>
+                    Data lengkap profil agent yang terdaftar
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingProfile ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mr-3"></div>
+                      <span className="text-gray-600">Loading profile...</span>
+                    </div>
+                  ) : agentProfile ? (
+                    <div className="space-y-6">
+                      {/* Basic Information */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                            Informasi Dasar
+                          </h3>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Nama Lengkap
+                              </label>
+                              <p className="text-sm font-medium text-gray-900">
+                                {agentProfile.full_name || "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Email
+                              </label>
+                              <p className="text-sm text-gray-900">
+                                {agentProfile.email || "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Nomor Telepon
+                              </label>
+                              <p className="text-sm text-gray-900">
+                                {agentProfile.phone_number || "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Role
+                              </label>
+                              <div className="text-sm text-gray-900">
+                                <Badge variant="default">
+                                  {agentProfile.role || "Agent"}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                            Informasi Akun
+                          </h3>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Status Akun
+                              </label>
+                              <div className="text-sm text-gray-900">
+                                <Badge
+                                  variant={
+                                    agentProfile.status === "active"
+                                      ? "default"
+                                      : "secondary"
+                                  }
+                                >
+                                  {agentProfile.status === "active"
+                                    ? "Aktif"
+                                    : agentProfile.status || "N/A"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Saldo
+                              </label>
+                              <p className="text-lg font-semibold text-green-600">
+                                {formatCurrency(agentProfile.saldo || 0)}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Tanggal Bergabung
+                              </label>
+                              <p className="text-sm text-gray-900">
+                                {agentProfile.created_at
+                                  ? formatDate(agentProfile.created_at)
+                                  : "N/A"}
+                              </p>
+                            </div>
+                            {/*      <div>
+                              <label className="text-sm font-medium text-gray-500">
+                                Role ID
+                              </label>
+                              <p className="text-sm text-gray-900">
+                                {agentProfile.role_id || "N/A"}
+                              </p>
+                            </div>*/}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                          Informasi Tambahan
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="text-sm font-medium text-gray-500">
+                              Nomor KTP
+                            </label>
+                            <p className="text-sm text-gray-900">
+                              {agentProfile.ktp_number || "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-500">
+                              Nomor Lisensi
+                            </label>
+                            <p className="text-sm text-gray-900">
+                              {agentProfile.license_number || "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-500">
+                              Pendidikan
+                            </label>
+                            <p className="text-sm text-gray-900">
+                              {agentProfile.education || "N/A"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Statistics */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                          Statistik
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <div className="flex items-center">
+                              <Package className="h-5 w-5 text-green-600 mr-2" />
+                              <span className="text-sm font-medium text-green-800">
+                                Total Pesanan
+                              </span>
+                            </div>
+                            <p className="text-2xl font-bold text-green-600 mt-2">
+                              {orders.length}
+                            </p>
+                          </div>
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <div className="flex items-center">
+                              <Users className="h-5 w-5 text-blue-600 mr-2" />
+                              <span className="text-sm font-medium text-blue-800">
+                                Total Passenger
+                              </span>
+                            </div>
+                            <p className="text-2xl font-bold text-blue-600 mt-2">
+                              {totalParticipants}
+                            </p>
+                          </div>
+                          <div className="bg-yellow-50 p-4 rounded-lg">
+                            <div className="flex items-center">
+                              <DollarSign className="h-5 w-5 text-yellow-600 mr-2" />
+                              <span className="text-sm font-medium text-yellow-800">
+                                Total Pendapatan
+                              </span>
+                            </div>
+                            <p className="text-2xl font-bold text-yellow-600 mt-2">
+                              {formatCurrency(totalRevenue)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">
+                        Data profil tidak ditemukan
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
         </main>
