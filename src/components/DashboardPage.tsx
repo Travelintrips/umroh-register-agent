@@ -1506,7 +1506,7 @@ const DashboardPage = () => {
                           Manual konfirmasi
                         </div>
                       </button>
-                      <button
+                      {/*   <button
                         type="button"
                         onClick={() => {
                           setSelectedPaymentMethod("paylabs");
@@ -1518,11 +1518,11 @@ const DashboardPage = () => {
                             : "border-gray-300 hover:border-gray-400"
                         }`}
                       >
-                        <div className="font-medium mb-1">Paylabs</div>
+                       <div className="font-medium mb-1">Paylabs</div>
                         <div className="text-sm text-gray-600">
                           Auto konfirmasi
                         </div>
-                      </button>
+                      </button> */}
                     </div>
                   </div>
 
