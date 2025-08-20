@@ -363,7 +363,7 @@ const BookingFormGroup = () => {
             kode_booking: generatedBookingCode,
             nominal: -totalAmount, // Negative for deduction
             saldo_akhir: newSaldo,
-            keterangan: `Pembayaran booking ${generatedBookingCode} - ${formData.category}`,
+            keterangan: `Pembayaran booking ${generatedBookingCode} - ${bookingData.category}`,
             trans_date: new Date().toISOString(),
           });
 
