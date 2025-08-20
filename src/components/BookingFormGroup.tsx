@@ -355,6 +355,22 @@ const BookingFormGroup = () => {
           throw new Error(`Gagal memotong saldo: ${saldoError.message}`);
         }
 
+        //helper undefined category
+        const buildTxnDescription = (
+          transaction: any,
+          handlingBookings: any[],
+        ) => {
+          // Cari booking terkait
+          const relatedBooking = handlingBookings.find(
+            (b) => b.code_booking === transaction.kode_booking,
+          );
+
+          // Ambil category, kalau kosong kasih default
+          const category = relatedBooking?.category || "Handling Group";
+
+          return `Pembayaran booking ${transaction.kode_booking || "N/A"} - ${category}`;
+        };
+
         // Create transaction history record
         const { error: historyError } = await supabase
           .from("histori_transaksi")
@@ -363,7 +379,8 @@ const BookingFormGroup = () => {
             kode_booking: generatedBookingCode,
             nominal: -totalAmount, // Negative for deduction
             saldo_akhir: newSaldo,
-            keterangan: `Pembayaran booking ${generatedBookingCode} - ${bookingData.category}`,
+            keterangan: `Pembayaran booking ${generatedBookingCode} - ${bookingData?.category ?? "Handling"}`,
+
             trans_date: new Date().toISOString(),
           });
 

@@ -712,6 +712,19 @@ const DashboardPage = () => {
     );
   }
 
+  //menambahkan category di keterangan
+  const buildTxnDescription = (transaction: any, handlingBookings: any[]) => {
+    // Cari booking terkait
+    const relatedBooking = handlingBookings.find(
+      (b) => b.code_booking === transaction.kode_booking,
+    );
+
+    // Ambil category, kalau kosong kasih default
+    const category = relatedBooking?.category || "Handling Group";
+
+    return `Pembayaran booking ${transaction.kode_booking || "N/A"} - ${category}`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex">
       {/* Sidebar */}
