@@ -272,7 +272,7 @@ const BookingFormGroup = () => {
           setSubmitError(
             `Saldo tidak mencukupi. Saldo Anda: ${formatCurrency(userSaldo)}, Total pembayaran: ${formatCurrency(totalAmount)}`,
           );
-          setIsSubmittingTopUp(false);
+          setIsSubmitting(false);
           return;
         }
       }
