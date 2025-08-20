@@ -1405,16 +1405,24 @@ const BookingFormGroup = () => {
                                     Total Harga:
                                   </span>
                                   <span className="text-lg font-bold text-blue-900">
-                                    {formatCurrency(calculateTotalPrice())}
+                                    {formatCurrency(
+                                      calculateTotalPrice() *
+                                        (form.watch("jumlah_penumpang") || 1),
+                                    )}
                                   </span>
                                 </div>
-                                <div className="text-xs text-blue-600 mt-1">
-                                  Harga per penumpang ×{" "}
-                                  {form.watch("jumlah_penumpang")} penumpang ={" "}
-                                  {formatCurrency(
-                                    calculateTotalPrice() *
-                                      (form.watch("jumlah_penumpang") || 1),
-                                  )}
+                                <div className="text-xs text-blue-600 mt-1 space-y-1">
+                                  <div>
+                                    Harga per penumpang ×{" "}
+                                    {form.watch("jumlah_penumpang")} penumpang
+                                  </div>
+                                  <div className="font-semibold">
+                                    Total Harga ={" "}
+                                    {formatCurrency(
+                                      calculateTotalPrice() *
+                                        (form.watch("jumlah_penumpang") || 1),
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )}
