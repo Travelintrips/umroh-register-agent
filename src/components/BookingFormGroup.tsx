@@ -180,30 +180,16 @@ const BookingFormGroup = () => {
     const fetchServicePrices = async () => {
       try {
         setPricesLoading(true);
-        const { data, error } = await supabase
-          .from("airport_handling_services")
-          .select("id, basic_price, trip_type")
-          .in("id", [34, 35, 37]);
-
-        if (error) {
-          console.error("Error fetching service prices:", error);
-        } else {
-          console.log("Fetched service data:", data);
-          const pricesMap: { [key: string]: number } = {};
-          data?.forEach((service) => {
-            if (service.trip_type === "arrival") {
-              pricesMap["arrival"] = service.basic_price;
-            } else if (service.trip_type === "departure") {
-              pricesMap["departure"] = service.basic_price;
-            } else if (service.trip_type === "transit") {
-              pricesMap["transit"] = service.basic_price;
-            }
-          });
-          console.log("Prices map:", pricesMap);
-          setServicePrices(pricesMap);
-        }
+        // Set fixed prices as requested
+        const pricesMap: { [key: string]: number } = {
+          arrival: 25000,
+          departure: 25000,
+          transit: 50000,
+        };
+        console.log("Prices map:", pricesMap);
+        setServicePrices(pricesMap);
       } catch (error) {
-        console.error("Error fetching service prices:", error);
+        console.error("Error setting service prices:", error);
       } finally {
         setPricesLoading(false);
       }

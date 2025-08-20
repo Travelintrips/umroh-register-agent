@@ -168,7 +168,7 @@ const BookingFormPersonal = () => {
     }
 
     // Calculate total price (for personal booking, assume a fixed price per service)
-    const totalPrice = 50000; // Example price for personal booking
+    const totalPrice = 25000; // Updated price for personal booking
 
     if (selectedPaymentMethod === "use_saldo" && userSaldo < totalPrice) {
       setSubmitError(
@@ -324,7 +324,7 @@ const BookingFormPersonal = () => {
   const renderSummaryAndPayment = () => {
     if (!formData) return null;
 
-    const totalPrice = 50000; // Example price for personal booking
+    const totalPrice = 25000; // Updated price for personal booking
 
     return (
       <Card className="shadow-lg bg-white">

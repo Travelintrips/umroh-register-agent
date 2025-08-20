@@ -167,7 +167,7 @@ const BookingForm = () => {
     }
 
     // Calculate total price (for agent booking, assume a fixed price per service)
-    const totalPrice = 75000; // Example price for agent booking
+    const totalPrice = 25000; // Updated price for agent booking
 
     if (selectedPaymentMethod === "use_saldo" && userSaldo < totalPrice) {
       setSubmitError(
@@ -323,7 +323,7 @@ const BookingForm = () => {
   const renderSummaryAndPayment = () => {
     if (!formData) return null;
 
-    const totalPrice = 75000; // Example price for agent booking
+    const totalPrice = 25000; // Updated price for agent booking
 
     return (
       <Card className="shadow-lg bg-white">
