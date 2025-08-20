@@ -1252,14 +1252,14 @@ const DashboardPage = () => {
                                       order.status === "completed"
                                         ? "default"
                                         : order.status === "confirmed"
-                                          ? "secondary"
+                                          ? "outline"
                                           : "outline"
                                     }
                                   >
                                     {order.status === "completed"
                                       ? "Lunas"
                                       : order.status === "confirmed"
-                                        ? "Dibayar"
+                                        ? "Belum Bayar"
                                         : "Belum Bayar"}
                                   </Badge>
                                 </TableCell>
