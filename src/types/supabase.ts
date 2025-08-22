@@ -2364,6 +2364,8 @@ export type Database = {
           total_price: number
           travel_type: string
           updated_at: string | null
+          updated_by_name: string | null
+          updated_by_role: string | null
           user_id: string | null
         }
         Insert: {
@@ -2402,6 +2404,8 @@ export type Database = {
           total_price: number
           travel_type?: string
           updated_at?: string | null
+          updated_by_name?: string | null
+          updated_by_role?: string | null
           user_id?: string | null
         }
         Update: {
@@ -2440,6 +2444,8 @@ export type Database = {
           total_price?: number
           travel_type?: string
           updated_at?: string | null
+          updated_by_name?: string | null
+          updated_by_role?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -3304,9 +3310,43 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_recipients: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          notification_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          notification_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          notification_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_recipients_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           booking_id: string | null
+          booking_type: string | null
+          code_booking: string | null
           created_at: string | null
           driver_id: string | null
           id: string
@@ -3319,6 +3359,8 @@ export type Database = {
         }
         Insert: {
           booking_id?: string | null
+          booking_type?: string | null
+          code_booking?: string | null
           created_at?: string | null
           driver_id?: string | null
           id?: string
@@ -3331,6 +3373,8 @@ export type Database = {
         }
         Update: {
           booking_id?: string | null
+          booking_type?: string | null
+          code_booking?: string | null
           created_at?: string | null
           driver_id?: string | null
           id?: string
@@ -3342,20 +3386,6 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "notifications_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "journal_entries_with_bookings"
-            referencedColumns: ["booking_id"]
-          },
           {
             foreignKeyName: "notifications_driver_id_fkey"
             columns: ["driver_id"]
@@ -4532,6 +4562,10 @@ export type Database = {
           foto_ktp: string | null
           fuel_type: string | null
           full_name: string | null
+          handling_discount_active: boolean | null
+          handling_discount_cap: number | null
+          handling_discount_kind: string | null
+          handling_discount_value: number | null
           id: string
           id_card_url: string | null
           kk_url: string | null
@@ -4588,6 +4622,10 @@ export type Database = {
           foto_ktp?: string | null
           fuel_type?: string | null
           full_name?: string | null
+          handling_discount_active?: boolean | null
+          handling_discount_cap?: number | null
+          handling_discount_kind?: string | null
+          handling_discount_value?: number | null
           id: string
           id_card_url?: string | null
           kk_url?: string | null
@@ -4644,6 +4682,10 @@ export type Database = {
           foto_ktp?: string | null
           fuel_type?: string | null
           full_name?: string | null
+          handling_discount_active?: boolean | null
+          handling_discount_cap?: number | null
+          handling_discount_kind?: string | null
+          handling_discount_value?: number | null
           id?: string
           id_card_url?: string | null
           kk_url?: string | null
@@ -4782,7 +4824,7 @@ export type Database = {
           name: string | null
           plate_number: string | null
           price: number
-          price_km: number | null
+          price_km: number
           seats: number | null
           sheet_row_index: number | null
           status: string | null
@@ -4821,7 +4863,7 @@ export type Database = {
           name?: string | null
           plate_number?: string | null
           price: number
-          price_km?: number | null
+          price_km?: number
           seats?: number | null
           sheet_row_index?: number | null
           status?: string | null
@@ -4860,7 +4902,7 @@ export type Database = {
           name?: string | null
           plate_number?: string | null
           price?: number
-          price_km?: number | null
+          price_km?: number
           seats?: number | null
           sheet_row_index?: number | null
           status?: string | null
@@ -5303,6 +5345,8 @@ export type Database = {
           note: string | null
           proof_url: string | null
           reference_no: string | null
+          saldo_akhir: number | null
+          saldo_awal: number | null
           sender_account: string | null
           sender_bank: string | null
           sender_name: string | null
@@ -5404,6 +5448,50 @@ export type Database = {
       }
       my_function: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      notify_fanout: {
+        Args:
+          | {
+              body: string
+              booking_id: string
+              booking_type: string
+              code_booking: string
+              scope: string
+              service: string
+              target_user?: string
+              title: string
+            }
+          | {
+              body: string
+              booking_id: string
+              booking_type: string
+              code_booking?: string
+              role?: string
+              scope?: string
+              service: string
+              target_user?: string
+              title: string
+            }
+          | {
+              body: string
+              booking_id: string
+              booking_type: string
+              role?: string
+              scope?: string
+              service: string
+              target_user?: string
+              title: string
+            }
+          | {
+              body: string
+              booking_id: string
+              booking_type: string
+              scope: string
+              service: string
+              target_user?: string
+              title: string
+            }
         Returns: undefined
       }
       pay_booking_and_set_driver_standby: {

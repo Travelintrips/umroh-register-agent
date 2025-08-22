@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { useRoutes, Routes, Route } from "react-router-dom";
+import { useRoutes, Routes, Route, Navigate } from "react-router-dom";
 import UmrohHomePage from "./components/UmrohHomePage";
 import AgentRegistrationForm from "./components/AgentRegistrationForm";
 import SignInPage from "./components/SignInPage";
@@ -21,7 +21,11 @@ function App() {
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/topup-details" element={<TopUpDetails />} />
-          <Route path="/booking" element={<BookingSelection />} />
+          <Route
+            path="/booking"
+            element={<Navigate to="/booking/group" replace />}
+          />
+          <Route path="/booking/select" element={<Navigate to="/" replace />} />
           <Route path="/booking/personal" element={<BookingFormPersonal />} />
           <Route path="/booking/group" element={<BookingFormGroup />} />
           <Route path="/booking/old" element={<BookingForm />} />

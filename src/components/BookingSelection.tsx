@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "./ui/button";
 import {
@@ -12,6 +12,11 @@ import { MapPin, User, Users } from "lucide-react";
 
 const BookingSelection = () => {
   const navigate = useNavigate();
+
+  // Auto-redirect to group booking
+  useEffect(() => {
+    navigate("/booking/group", { replace: true });
+  }, [navigate]);
 
   const handlePersonalBooking = () => {
     navigate("/booking/personal");
@@ -61,12 +66,11 @@ const BookingSelection = () => {
                 <li>• Koordinasi terpusat</li>
                 <li>• Fasilitas grup khusus</li>
               </ul>
-              <Button
-                className="w-full bg-green-600 hover:bg-green-700 text-sm sm:text-base"
-                onClick={handleGroupBooking}
-              >
-                Pilih Group Booking
-              </Button>
+              <Link to="/booking/group">
+                <Button className="w-full bg-green-600 hover:bg-green-700 text-sm sm:text-base">
+                  Pilih Group Booking
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
