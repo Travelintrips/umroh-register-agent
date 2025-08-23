@@ -78,6 +78,10 @@ const formSchema = z
     jenis_perjalanan: z
       .array(z.string())
       .min(1, { message: "Pilih minimal satu jenis perjalanan" }),
+    additional_baggage: z
+      .number()
+      .min(0, { message: "Jumlah bagasi tambahan tidak boleh negatif" })
+      .optional(),
     area_penjemputan: z.string().optional(),
     area_pengantaran: z.string().optional(),
     tanggal_pickup: z.string().min(1, { message: "Tanggal pickup diperlukan" }),
@@ -129,9 +133,9 @@ const locationOptions = [
 ];
 
 const travelTypes = [
-  { id: "arrival", label: "Arrival", dbId: 22 },
-  { id: "departure", label: "Departure", dbId: 23 },
-  { id: "transit", label: "Transit", dbId: 32 },
+  { id: "arrival", label: "Arrival", dbId: 40, tripType: "arrival" },
+  { id: "departure", label: "Departure", dbId: 41, tripType: "departure" },
+  { id: "transit", label: "Transit", dbId: 46, tripType: "transit" },
 ];
 
 const BookingFormGroup = () => {
@@ -151,6 +155,9 @@ const BookingFormGroup = () => {
   const [servicePrices, setServicePrices] = useState<{ [key: string]: number }>(
     {},
   );
+  const [additionalPrices, setAdditionalPrices] = useState<{
+    [key: string]: number;
+  }>({});
   const [pricesLoading, setPricesLoading] = useState(true);
   const [showSummary, setShowSummary] = useState(false);
   const [formData, setFormData] = useState<FormValues | null>(null);
@@ -174,6 +181,7 @@ const BookingFormGroup = () => {
       jumlah_penumpang: 1,
       nomor_penerbangan: "",
       jenis_perjalanan: [],
+      additional_baggage: 0,
       area_penjemputan: "",
       area_pengantaran: "",
       tanggal_pickup: "",
@@ -235,16 +243,72 @@ const BookingFormGroup = () => {
     const fetchServicePrices = async () => {
       try {
         setPricesLoading(true);
-        // Set fixed prices as requested
+
+        // Fetch prices from airport_handling_services table
+        const { data: servicesData, error } = await supabase
+          .from("airport_handling_services")
+          .select(
+            "id, service_type, category, trip_type, sell_price, additional",
+          )
+          .eq("service_type", "Handling Passenger")
+          .eq("category", "Agent Group")
+          .in("id", [40, 41, 42, 46]);
+
+        if (error) {
+          console.error("Error fetching service prices:", error);
+          // Fallback to default prices if database query fails
+          const pricesMap: { [key: string]: number } = {
+            arrival: 25000,
+            departure: 25000,
+            transit: 50000,
+          };
+          const additionalMap: { [key: string]: number } = {
+            arrival: 0,
+            departure: 0,
+            transit: 0,
+          };
+          setServicePrices(pricesMap);
+          setAdditionalPrices(additionalMap);
+          return;
+        }
+
+        // Map the database results to our price structure
+        const pricesMap: { [key: string]: number } = {};
+        const additionalMap: { [key: string]: number } = {};
+
+        servicesData?.forEach((service) => {
+          if (service.id === 40 && service.trip_type === "arrival") {
+            pricesMap.arrival = service.sell_price;
+            additionalMap.arrival = service.additional || 0;
+          } else if (service.id === 41 && service.trip_type === "departure") {
+            pricesMap.departure = service.sell_price;
+            additionalMap.departure = service.additional || 0;
+          } else if (service.id === 46 && service.trip_type === "transit") {
+            pricesMap.transit = service.sell_price;
+            additionalMap.transit = service.additional || 0;
+          } else if (
+            service.id === 42 &&
+            service.trip_type === "arrival_departure"
+          ) {
+            pricesMap.arrival_departure = service.sell_price;
+            additionalMap.arrival_departure = service.additional || 0;
+          }
+        });
+
+        console.log("Fetched prices from database:", pricesMap);
+        console.log("Fetched additional prices from database:", additionalMap);
+        console.log("Services data:", servicesData);
+        setServicePrices(pricesMap);
+        setAdditionalPrices(additionalMap);
+      } catch (error) {
+        console.error("Error fetching service prices:", error);
+        // Fallback to default prices
         const pricesMap: { [key: string]: number } = {
           arrival: 25000,
           departure: 25000,
           transit: 50000,
         };
-        console.log("Prices map:", pricesMap);
         setServicePrices(pricesMap);
-      } catch (error) {
-        console.error("Error setting service prices:", error);
       } finally {
         setPricesLoading(false);
       }
@@ -319,7 +383,9 @@ const BookingFormGroup = () => {
 
       // Calculate total amounts with discount
       const totalServicePrice = calculateTotalPrice();
-      const originalTotalAmount = totalServicePrice * formData.jumlah_penumpang;
+      const additionalBaggagePrice = calculateAdditionalBaggagePrice();
+      const originalTotalAmount =
+        totalServicePrice * formData.jumlah_penumpang + additionalBaggagePrice;
       // Use form values for total_payment_amount
       const totalAmount =
         form.watch("total_after_discount") ||
@@ -591,39 +657,70 @@ const BookingFormGroup = () => {
 
   const calculateTotalPrice = () => {
     const selectedTypes = form.watch("jenis_perjalanan") || [];
-    let total = 0;
-    selectedTypes.forEach((type: string) => {
-      if (servicePrices[type]) {
-        total += servicePrices[type];
-      }
-    });
-    return total;
+
+    let serviceTotal = 0;
+
+    // Check if both arrival and departure are selected
+    if (
+      selectedTypes.includes("arrival") &&
+      selectedTypes.includes("departure")
+    ) {
+      // Use arrival_departure price from ID 42
+      serviceTotal = servicePrices.arrival_departure || 0;
+    } else {
+      // Otherwise, sum individual prices
+      selectedTypes.forEach((type: string) => {
+        if (servicePrices[type]) {
+          serviceTotal += servicePrices[type];
+        }
+      });
+    }
+
+    return serviceTotal;
+  };
+
+  const calculateAdditionalBaggagePrice = () => {
+    const selectedTypes = form.watch("jenis_perjalanan") || [];
+    const additionalBaggage = form.watch("additional_baggage") || 0;
+
+    if (additionalBaggage === 0) return 0;
+
+    let additionalTotal = 0;
+
+    // Check if both arrival and departure are selected
+    if (
+      selectedTypes.includes("arrival") &&
+      selectedTypes.includes("departure")
+    ) {
+      additionalTotal =
+        (additionalPrices.arrival_departure || 0) * additionalBaggage;
+    } else {
+      // Otherwise, sum individual additional prices
+      selectedTypes.forEach((type: string) => {
+        if (additionalPrices[type]) {
+          additionalTotal += additionalPrices[type] * additionalBaggage;
+        }
+      });
+    }
+
+    return additionalTotal;
   };
 
   const calculateDiscountedPrice = (originalPrice: number) => {
-    if (!userDiscount.active || !userDiscount.kind || !userDiscount.value) {
+    if (!userDiscount.active || !userDiscount.value) {
       return originalPrice;
     }
 
-    let discountAmount = 0;
-    if (userDiscount.kind === "PERCENT") {
-      discountAmount = Math.floor((originalPrice * userDiscount.value) / 100);
-    } else if (userDiscount.kind === "AMOUNT") {
-      discountAmount = Math.floor(userDiscount.value);
-    }
-
-    // Apply discount cap if specified
-    if (userDiscount.cap && discountAmount > userDiscount.cap) {
-      discountAmount = userDiscount.cap;
-    }
+    // Calculate discount per passenger
+    const jumlahPenumpang = form.watch("jumlah_penumpang") || 1;
+    const discountPerPassenger = Math.floor(userDiscount.value);
+    const totalDiscount = discountPerPassenger * jumlahPenumpang;
 
     // Ensure discount doesn't exceed original price
-    if (discountAmount > originalPrice) {
-      discountAmount = originalPrice;
-    }
+    const finalDiscount = Math.min(totalDiscount, originalPrice);
 
-    const finalTotal = originalPrice - discountAmount;
-    return finalTotal < 0 ? 0 : finalTotal;
+    const finalTotal = Math.max(0, originalPrice - finalDiscount);
+    return finalTotal;
   };
 
   const handleDiscountSave = async () => {
@@ -631,47 +728,28 @@ const BookingFormGroup = () => {
       return;
     }
 
-    // Validate discount value based on kind
-    if (
-      discountKind === "PERCENT" &&
-      (discountValue < 0 || discountValue > 100)
-    ) {
-      setSubmitError("Nilai diskon persen harus antara 0-100");
-      return;
-    }
-
     try {
       // Calculate discount amounts for current form data
       const basePrice = calculateTotalPrice();
       const totalHarga = basePrice * (form.watch("jumlah_penumpang") || 1);
+      const jumlahPenumpang = form.watch("jumlah_penumpang") || 1;
 
-      // Convert percentage to nominal if needed
-      let finalDiscountKind = discountKind;
-      let finalDiscountValue = discountValue;
-      let handlingDiscountIsPercentage = discountKind === "PERCENT";
+      // Use discountValue as discount per passenger
+      const discountPerPassenger = Math.floor(discountValue);
+      const totalDiscount = discountPerPassenger * jumlahPenumpang;
 
-      if (discountKind === "PERCENT" || handlingDiscountIsPercentage) {
-        // Convert to nominal
-        finalDiscountKind = "AMOUNT";
-        finalDiscountValue = Math.floor((totalHarga * discountValue) / 100);
-        handlingDiscountIsPercentage = false;
-      }
-
-      // Clean discount_value from rupiah format and get discount amount
-      const discountValueFromForm = finalDiscountValue
-        .toString()
-        .replace(/[^\d-]/g, "");
-      const discountAmount = Math.abs(parseInt(discountValueFromForm) || 0);
+      // Ensure discount doesn't exceed total price
+      const finalDiscount = Math.min(totalDiscount, totalHarga);
 
       // Calculate total after discount
-      const totalAfterDiscount = Math.max(0, totalHarga - discountAmount);
+      const totalAfterDiscount = Math.max(0, totalHarga - finalDiscount);
 
       // Only set form values if they're different to prevent re-renders
       const currentDiscountAmount = form.getValues("discount_amount");
       const currentTotalAfterDiscount = form.getValues("total_after_discount");
 
-      if (currentDiscountAmount !== discountAmount) {
-        form.setValue("discount_amount", discountAmount);
+      if (currentDiscountAmount !== finalDiscount) {
+        form.setValue("discount_amount", finalDiscount);
       }
       if (currentTotalAfterDiscount !== totalAfterDiscount) {
         form.setValue("total_after_discount", totalAfterDiscount);
@@ -681,12 +759,12 @@ const BookingFormGroup = () => {
       const { error } = await supabase
         .from("users")
         .update({
-          handling_discount_kind: finalDiscountKind,
-          handling_discount_value: finalDiscountValue,
-          handling_discount_amount: discountAmount,
+          handling_discount_kind: "AMOUNT",
+          handling_discount_value: discountPerPassenger,
+          handling_discount_amount: finalDiscount,
           total_after_discount: totalAfterDiscount,
           handling_discount_active: true,
-          handling_discount_is_percentage: handlingDiscountIsPercentage,
+          handling_discount_is_percentage: false,
         })
         .eq("id", user.id);
 
@@ -698,8 +776,8 @@ const BookingFormGroup = () => {
 
       // Update local state
       setUserDiscount({
-        kind: finalDiscountKind,
-        value: finalDiscountValue,
+        kind: "AMOUNT",
+        value: discountPerPassenger,
         cap: userDiscount.cap,
         active: true,
       });
@@ -712,17 +790,12 @@ const BookingFormGroup = () => {
   };
 
   const getDiscountLabel = () => {
-    if (!userDiscount.active || !userDiscount.kind || !userDiscount.value) {
+    if (!userDiscount.active || !userDiscount.value) {
       return null;
     }
 
-    if (userDiscount.kind === "PERCENT") {
-      return `Diskon ${userDiscount.value}%${userDiscount.cap ? ` (maks ${formatCurrency(userDiscount.cap)})` : ""}`;
-    } else if (userDiscount.kind === "AMOUNT") {
-      return `Diskon ${formatCurrency(userDiscount.value)}`;
-    }
-
-    return null;
+    const jumlahPenumpang = form.watch("jumlah_penumpang") || 1;
+    return `Diskon ${formatCurrency(userDiscount.value)} per penumpang (${jumlahPenumpang} penumpang)`;
   };
 
   const formatCurrency = (amount: number) => {
@@ -804,7 +877,9 @@ const BookingFormGroup = () => {
     if (!formData || !bookingCode) return null;
 
     const totalServicePrice = calculateTotalPrice();
-    const originalTotalAmount = totalServicePrice * formData.jumlah_penumpang;
+    const additionalBaggagePrice = calculateAdditionalBaggagePrice();
+    const originalTotalAmount =
+      totalServicePrice * formData.jumlah_penumpang + additionalBaggagePrice;
     // Use form.watch('total_after_discount') as the payment amount
     const totalAmount =
       form.watch("total_after_discount") ||
@@ -1103,7 +1178,9 @@ const BookingFormGroup = () => {
     if (!formData) return null;
 
     const totalServicePrice = calculateTotalPrice();
-    const originalTotalAmount = totalServicePrice * formData.jumlah_penumpang;
+    const additionalBaggagePrice = calculateAdditionalBaggagePrice();
+    const originalTotalAmount =
+      totalServicePrice * formData.jumlah_penumpang + additionalBaggagePrice;
     // Use form.watch('total_after_discount') as the payment amount
     const totalAmount =
       form.watch("total_after_discount") ||
@@ -1726,30 +1803,82 @@ const BookingFormGroup = () => {
                             ))}
                           </div>
                           <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                          {/* Total Price Display */}
+                  <Separator />
+
+                  {/* Additional Baggage Section */}
+                  <div>
+                    <h3 className="text-base sm:text-lg font-semibold mb-4">
+                      Additional Baggage
+                    </h3>
+                    <FormField
+                      control={form.control}
+                      name="additional_baggage"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Jumlah Bagasi Tambahan</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="Masukkan jumlah bagasi tambahan"
+                              min={0}
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(parseInt(e.target.value) || 0)
+                              }
+                            />
+                          </FormControl>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Kosongkan atau isi 0 jika tidak ada bagasi tambahan
+                          </p>
+                          {/* Show total price when travel type is selected */}
                           {form.watch("jenis_perjalanan")?.length > 0 &&
                             !pricesLoading && (
                               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                 {(() => {
-                                  const originalTotal =
-                                    calculateTotalPrice() *
-                                    (form.watch("jumlah_penumpang") || 1);
+                                  const baseServicePrice =
+                                    calculateTotalPrice();
+                                  const jumlahPenumpang =
+                                    form.watch("jumlah_penumpang") || 1;
+                                  const additionalBaggage =
+                                    form.watch("additional_baggage") || 0;
+                                  const additionalBaggagePrice =
+                                    calculateAdditionalBaggagePrice();
+
+                                  const baseTotal =
+                                    baseServicePrice * jumlahPenumpang;
+                                  const totalWithBaggage =
+                                    baseTotal + additionalBaggagePrice;
                                   const discountedTotal =
-                                    calculateDiscountedPrice(originalTotal);
+                                    calculateDiscountedPrice(totalWithBaggage);
                                   const hasDiscount =
                                     userDiscount.active &&
-                                    discountedTotal < originalTotal;
+                                    discountedTotal < totalWithBaggage;
 
                                   return (
                                     <div className="space-y-2">
-                                      {hasDiscount && (
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="text-blue-800">
+                                          Harga per penumpang ×{" "}
+                                          {jumlahPenumpang} penumpang
+                                        </span>
+                                        <span className="text-blue-800">
+                                          {formatCurrency(baseTotal)}
+                                        </span>
+                                      </div>
+                                      {additionalBaggage > 0 && (
                                         <div className="flex items-center justify-between text-sm">
-                                          <span className="text-gray-600 line-through">
-                                            Harga Normal:
+                                          <span className="text-blue-800">
+                                            {additionalBaggage} bagasi tambahan
                                           </span>
-                                          <span className="text-gray-600 line-through">
-                                            {formatCurrency(originalTotal)}
+                                          <span className="text-blue-800">
+                                            {formatCurrency(
+                                              additionalBaggagePrice,
+                                            )}
                                           </span>
                                         </div>
                                       )}
@@ -1761,44 +1890,41 @@ const BookingFormGroup = () => {
                                           <span className="text-green-600 font-medium">
                                             -
                                             {formatCurrency(
-                                              originalTotal - discountedTotal,
+                                              totalWithBaggage -
+                                                discountedTotal,
                                             )}
                                           </span>
                                         </div>
                                       )}
-                                      <div className="flex items-center justify-between">
+                                      <div className="flex items-center justify-between border-t pt-2">
                                         <span className="text-sm font-medium text-blue-800">
-                                          {hasDiscount
-                                            ? "Total Setelah Diskon:"
-                                            : "Total Harga:"}
+                                          Total Harga:
                                         </span>
                                         <span
                                           className={`text-lg font-bold ${hasDiscount ? "text-green-900" : "text-blue-900"}`}
                                         >
-                                          {formatCurrency(discountedTotal)}
+                                          {formatCurrency(
+                                            hasDiscount
+                                              ? discountedTotal
+                                              : totalWithBaggage,
+                                          )}
                                         </span>
                                       </div>
-                                      <div className="text-xs text-blue-600 mt-1 space-y-1">
-                                        <div>
-                                          Harga per penumpang ×{" "}
-                                          {form.watch("jumlah_penumpang")}{" "}
-                                          penumpang
+                                      {hasDiscount && (
+                                        <div className="text-xs text-green-600 font-semibold text-center">
+                                          Hemat{" "}
+                                          {formatCurrency(
+                                            totalWithBaggage - discountedTotal,
+                                          )}
+                                          !
                                         </div>
-                                        {hasDiscount && (
-                                          <div className="font-semibold text-green-600">
-                                            Hemat{" "}
-                                            {formatCurrency(
-                                              originalTotal - discountedTotal,
-                                            )}
-                                            !
-                                          </div>
-                                        )}
-                                      </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
                               </div>
                             )}
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -1819,9 +1945,7 @@ const BookingFormGroup = () => {
                               Jenis Diskon
                             </Label>
                             <div className="p-2 bg-white border rounded text-sm">
-                              {userDiscount.kind === "PERCENT"
-                                ? "Persen (%)"
-                                : "Nominal (Rp)"}
+                              Nominal per penumpang (Rp)
                             </div>
                           </div>
 
@@ -1830,9 +1954,8 @@ const BookingFormGroup = () => {
                               Nilai Diskon
                             </Label>
                             <div className="p-2 bg-white border rounded text-sm">
-                              {userDiscount.kind === "PERCENT"
-                                ? `${userDiscount.value}%`
-                                : formatCurrency(userDiscount.value || 0)}
+                              {formatCurrency(userDiscount.value || 0)} per
+                              penumpang
                             </div>
                           </div>
                         </div>
@@ -1842,35 +1965,27 @@ const BookingFormGroup = () => {
                           const basePrice = calculateTotalPrice();
                           const totalHarga =
                             basePrice * (form.watch("jumlah_penumpang") || 1);
+                          const jumlahPenumpang =
+                            form.watch("jumlah_penumpang") || 1;
 
                           if (totalHarga > 0 && userDiscount.value) {
-                            // Convert percentage to nominal if needed
-                            let finalDiscountKind = userDiscount.kind;
-                            let finalDiscountValue = userDiscount.value;
+                            // Calculate discount per passenger
+                            const discountPerPassenger = Math.floor(
+                              userDiscount.value,
+                            );
+                            const totalDiscount =
+                              discountPerPassenger * jumlahPenumpang;
 
-                            if (
-                              userDiscount.kind === "PERCENT" ||
-                              userProfile?.handling_discount_is_percentage
-                            ) {
-                              // Convert to nominal
-                              finalDiscountKind = "AMOUNT";
-                              finalDiscountValue = Math.floor(
-                                (totalHarga * userDiscount.value) / 100,
-                              );
-                            }
-
-                            // Clean discount_value from rupiah format and get discount amount
-                            const discountValueFromForm = finalDiscountValue
-                              .toString()
-                              .replace(/[^\d-]/g, "");
-                            const discountAmount = Math.abs(
-                              parseInt(discountValueFromForm) || 0,
+                            // Ensure discount doesn't exceed total price
+                            const finalDiscount = Math.min(
+                              totalDiscount,
+                              totalHarga,
                             );
 
                             // Calculate total after discount
                             const totalAfterDiscount = Math.max(
                               0,
-                              totalHarga - discountAmount,
+                              totalHarga - finalDiscount,
                             );
 
                             return (
