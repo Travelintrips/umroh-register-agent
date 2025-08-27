@@ -43,6 +43,7 @@ import {
   X,
   Search,
   Download,
+  Printer,
 } from "lucide-react";
 
 type HandlingBooking = Tables<"handling_bookings"> & {
@@ -558,6 +559,324 @@ const DashboardPage = () => {
   );
 
   // Download functionality
+  const handlePrintInvoice = (order: Order) => {
+    const originalBooking = handlingBookings.find(
+      (booking) => (booking.code_booking || booking.id) === order.id,
+    );
+
+    if (!originalBooking) {
+      alert("Data booking tidak ditemukan");
+      return;
+    }
+
+    // Calculate discount details
+    const memberDiscount = Number(originalBooking.member_discount) || 0;
+    const userDiscount = Number(originalBooking.user_discount) || 0;
+    const passengers = Number(order.participants) || 1;
+    const totalAmount = Number(order.total_amount) || 0;
+    const basicPrice = Number(originalBooking.price) || 0;
+    const originalTotalAmount =
+      Number(originalBooking.harga_asli) || basicPrice * passengers;
+
+    let currentTotal = originalTotalAmount;
+    let memberDiscountAmount = 0;
+    let userDiscountAmount = 0;
+
+    // Apply membership discount first
+    if (memberDiscount > 0) {
+      memberDiscountAmount = Math.round(
+        (originalTotalAmount * memberDiscount) / 100,
+      );
+      currentTotal = Math.max(0, currentTotal - memberDiscountAmount);
+    }
+
+    // Apply user discount second
+    if (userDiscount > 0) {
+      const requestedUserDiscount = userDiscount * passengers;
+      userDiscountAmount = Math.min(requestedUserDiscount, currentTotal);
+      currentTotal = Math.max(0, currentTotal - userDiscountAmount);
+    }
+
+    const totalDiscountAmount = memberDiscountAmount + userDiscountAmount;
+    const currentDate = new Date().toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const currentTime = new Date().toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Create professional invoice content matching Screenshot_16
+    const invoiceContent = `
+      <html>
+        <head>
+          <title>Invoice - ${order.id}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: Arial, sans-serif; 
+              font-size: 12px;
+              line-height: 1.4;
+              color: #333;
+              background: white;
+              padding: 20px;
+            }
+            .invoice-container {
+              max-width: 800px;
+              margin: 0 auto;
+              border: 2px solid #4CAF50;
+              padding: 20px;
+              background: white;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              margin-bottom: 20px;
+              border-bottom: 2px solid #4CAF50;
+              padding-bottom: 15px;
+            }
+            .company-info {
+              flex: 1;
+            }
+            .company-name {
+              font-size: 18px;
+              font-weight: bold;
+              color: #4CAF50;
+              margin-bottom: 5px;
+            }
+            .invoice-title {
+              text-align: center;
+              flex: 1;
+              font-size: 16px;
+              font-weight: bold;
+              color: #333;
+            }
+            .invoice-number {
+              text-align: right;
+              flex: 1;
+              font-size: 12px;
+            }
+            .date-time {
+              text-align: left;
+              font-size: 10px;
+              color: #666;
+              margin-bottom: 10px;
+            }
+            .section {
+              margin-bottom: 20px;
+            }
+            .section-title {
+              font-weight: bold;
+              color: #4CAF50;
+              margin-bottom: 10px;
+              font-size: 13px;
+            }
+            .info-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 15px;
+              margin-bottom: 15px;
+            }
+            .info-item {
+              display: flex;
+              flex-direction: column;
+            }
+            .info-label {
+              font-weight: bold;
+              margin-bottom: 2px;
+              font-size: 11px;
+            }
+            .info-value {
+              font-size: 11px;
+            }
+            .payment-section {
+              border: 1px solid #ddd;
+              padding: 15px;
+              margin-top: 20px;
+            }
+            .payment-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 8px;
+              padding: 3px 0;
+            }
+            .payment-label {
+              font-size: 11px;
+            }
+            .payment-value {
+              font-size: 11px;
+              text-align: right;
+            }
+            .discount-row {
+              color: #4CAF50;
+              font-weight: bold;
+            }
+            .total-row {
+              border-top: 1px solid #333;
+              padding-top: 8px;
+              margin-top: 8px;
+              font-weight: bold;
+              font-size: 12px;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 10px;
+              color: #666;
+            }
+            @media print {
+              body { padding: 0; }
+              .invoice-container { border: 2px solid #4CAF50; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="date-time">${currentDate}, ${currentTime}</div>
+            
+            <div class="header">
+              <div class="company-info">
+                <div class="company-name">Travelintrips Handling<br>Airport</div>
+              </div>
+              <div class="invoice-title">
+                INVOICE PESANAN GROUP
+              </div>
+              <div class="invoice-number">
+                Invoice - ${order.id}
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">Informasi Pelanggan</div>
+              <div class="info-grid">
+                <div class="info-item">
+                  <div class="info-label">Nama Perusahaan:</div>
+                  <div class="info-value">PT Cahaya Sejati</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Nama Lengkap:</div>
+                  <div class="info-value">${order.customer_name}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Email:</div>
+                  <div class="info-value">${user?.email || "agent1@gmail.com"}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">No. Telepon:</div>
+                  <div class="info-value">087887222222</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">Detail Pesanan</div>
+              <div class="info-grid">
+                <div class="info-item">
+                  <div class="info-label">Jumlah Penumpang:</div>
+                  <div class="info-value">${order.participants} orang</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Jumlah Bagasi:</div>
+                  <div class="info-value">${order.participants * 2} bagasi</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Nomor Penerbangan:</div>
+                  <div class="info-value">${originalBooking?.flight_number || "QG"}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Jenis Perjalanan:</div>
+                  <div class="info-value">Transit</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Area Penjemputan:</div>
+                  <div class="info-value">${originalBooking?.pickup_area || "Terminal 1C - Domestic Arrival"}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Area Pengantaran:</div>
+                  <div class="info-value">${originalBooking?.dropoff_area || "Terminal 2D - Domestic Arrival"}</div>
+                </div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Tanggal & Waktu Pickup:</div>
+                <div class="info-value">${formatDate(order.departure_date)} - ${order.pickup_time || "18:11"}</div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">Detail Pembayaran</div>
+              <div class="payment-section">
+                <div class="payment-row">
+                  <span class="payment-label">Metode Pembayaran:</span>
+                  <span class="payment-value">Gunakan Saldo</span>
+                </div>
+                <div class="payment-row">
+                  <span class="payment-label">Transit</span>
+                  <span class="payment-value">${formatCurrency(basicPrice)}</span>
+                </div>
+                <div class="payment-row">
+                  <span class="payment-label">Subtotal per penumpang:</span>
+                  <span class="payment-value">${formatCurrency(basicPrice)}</span>
+                </div>
+                <div class="payment-row">
+                  <span class="payment-label">Jumlah penumpang:</span>
+                  <span class="payment-value">${order.participants} orang</span>
+                </div>
+                <div class="payment-row">
+                  <span class="payment-label">2 bagasi tambahan:</span>
+                  <span class="payment-value">${formatCurrency(originalTotalAmount - basicPrice * passengers)}</span>
+                </div>
+                <div class="payment-row">
+                  <span class="payment-label">Subtotal:</span>
+                  <span class="payment-value">${formatCurrency(originalTotalAmount)}</span>
+                </div>
+                ${
+                  userDiscountAmount > 0
+                    ? `
+                <div class="payment-row discount-row">
+                  <span class="payment-label">Diskon Rp ${formatCurrency(userDiscount).replace("Rp ", "")} per penumpang (${order.participants} penumpang):</span>
+                  <span class="payment-value">-${formatCurrency(userDiscountAmount)}</span>
+                </div>`
+                    : ""
+                }
+                ${
+                  memberDiscountAmount > 0
+                    ? `
+                <div class="payment-row discount-row">
+                  <span class="payment-label">Diskon Membership ${memberDiscount}%:</span>
+                  <span class="payment-value">-${formatCurrency(memberDiscountAmount)}</span>
+                </div>`
+                    : ""
+                }
+                <div class="payment-row total-row">
+                  <span class="payment-label">Total Pembayaran:</span>
+                  <span class="payment-value">${formatCurrency(totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="footer">
+              <div>about:blank</div>
+              <div style="margin-top: 10px;">1/1</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Open print window
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(invoiceContent);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }
+  };
+
   const downloadCSV = () => {
     const headers = [
       "ID Pesanan",
@@ -1202,9 +1521,22 @@ const DashboardPage = () => {
                                   <TableCell colSpan={8} className="p-0">
                                     <div className="bg-gray-50 border-t border-b border-gray-200 p-6">
                                       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
-                                          Detail Pesanan
-                                        </h3>
+                                        <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                          <h3 className="text-lg font-semibold text-gray-900">
+                                            Detail Pesanan
+                                          </h3>
+                                          <Button
+                                            onClick={() =>
+                                              handlePrintInvoice(order)
+                                            }
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex items-center gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300"
+                                          >
+                                            <Printer className="h-4 w-4" />
+                                            Print Invoice
+                                          </Button>
+                                        </div>
 
                                         <div className="space-y-3">
                                           <div className="grid grid-cols-3 gap-2">
