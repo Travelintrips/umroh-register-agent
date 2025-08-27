@@ -17,13 +17,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { Badge } from "./ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
@@ -56,6 +50,9 @@ type HandlingBooking = Tables<"handling_bookings"> & {
   destination_account?: string;
   sender_account?: string;
   sender_bank?: string;
+  member_discount?: number;
+  user_discount?: number;
+  harga_asli?: number;
 };
 
 type PaymentMethod = Tables<"payment_methods">;
@@ -151,8 +148,7 @@ const DashboardPage = () => {
   const [currentBalance, setCurrentBalance] = useState(5000000);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [bankMethods, setBankMethods] = useState<PaymentMethod[]>([]);
   const [selectedBankMethod, setSelectedBankMethod] = useState<string>("");
@@ -174,6 +170,7 @@ const DashboardPage = () => {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+
   const navigate = useNavigate();
 
   // Mock data for demonstration
@@ -224,7 +221,14 @@ const DashboardPage = () => {
     try {
       const { data, error } = await supabase
         .from("handling_bookings")
-        .select("*")
+        .select(
+          `
+          *,
+          member_discount,
+          user_discount,
+          harga_asli
+        `,
+        )
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -233,6 +237,7 @@ const DashboardPage = () => {
         return;
       }
 
+      console.log("Fetched handling bookings with discounts:", data);
       setHandlingBookings((data || []).map(normalizeBooking));
 
       // Convert handling bookings to orders format for compatibility
@@ -305,7 +310,6 @@ const DashboardPage = () => {
       setSaldo(data?.saldo || 0);
     } catch (error) {
       console.error("Error in fetchUserSaldo:", error);
-      setSaldo(0);
     } finally {
       setLoadingSaldo(false);
     }
@@ -531,101 +535,8 @@ const DashboardPage = () => {
     });
   };
 
-  const handleViewOrder = async (order: Order) => {
-    // Find the original booking data for more details
-    const originalBooking = handlingBookings.find(
-      (booking) => (booking.code_booking || booking.id) === order.id,
-    );
-
-    // Fetch bank details from payments table if payment method is bank_transfer
-    let bankName = "";
-    let destinationAccount = "";
-    let senderAccount = "";
-    let senderBank = "";
-
-    if (originalBooking?.payment_method === "bank_transfer") {
-      // First try to get bank name from handling_bookings table
-      if (originalBooking?.bank_name) {
-        bankName = originalBooking.bank_name;
-      }
-
-      // Try to get bank details from handling_bookings table first
-      if (originalBooking?.destination_account) {
-        destinationAccount = originalBooking.destination_account;
-      }
-      if (originalBooking?.sender_account) {
-        senderAccount = originalBooking.sender_account;
-      }
-      if (originalBooking?.sender_bank) {
-        senderBank = originalBooking.sender_bank;
-      }
-
-      // If not found and payment_id exists, try payments table
-      if (
-        originalBooking?.payment_id &&
-        (!destinationAccount || !senderAccount || !senderBank)
-      ) {
-        try {
-          const { data: paymentData, error } = await supabase
-            .from("payments")
-            .select(
-              "bank_name, destination_account, sender_account, sender_bank",
-            )
-            .eq("id", originalBooking.payment_id)
-            .single();
-
-          if (!error && paymentData) {
-            bankName = bankName || paymentData.bank_name || "";
-            destinationAccount =
-              destinationAccount ||
-              String(paymentData.destination_account || "");
-            senderAccount = senderAccount || paymentData.sender_account || "";
-            senderBank = senderBank || paymentData.sender_bank || "";
-          }
-        } catch (error) {
-          console.error("Error fetching bank details:", error);
-        }
-      }
-
-      // If still no data, try to get from the booking code in handling_bookings
-      if (!destinationAccount || !senderAccount || !senderBank) {
-        try {
-          const { data: bookingData, error } = await supabase
-            .from("handling_bookings")
-            .select(
-              "bank_name, destination_account, sender_account, sender_bank",
-            )
-            .eq("code_booking", order.id)
-            .single();
-
-          if (!error && bookingData) {
-            bankName = bankName || bookingData.bank_name || "";
-            destinationAccount =
-              destinationAccount || bookingData.destination_account || "";
-            senderAccount = senderAccount || bookingData.sender_account || "";
-            senderBank = senderBank || bookingData.sender_bank || "";
-          }
-        } catch (error) {
-          console.error("Error fetching booking bank details:", error);
-        }
-      }
-    }
-
-    // Create enhanced order with additional details
-    const enhancedOrder = {
-      ...order,
-      pickup_area: originalBooking?.pickup_area || "N/A",
-      dropoff_area: originalBooking?.dropoff_area || "N/A",
-      flight_number: originalBooking?.flight_number || "N/A",
-      bank_name: bankName,
-      destination_account: destinationAccount,
-      sender_account: senderAccount,
-      sender_bank: senderBank,
-    };
-
-    console.log("Enhanced order with bank details:", enhancedOrder); // Debug log
-    setSelectedOrder(enhancedOrder);
-    setViewModalOpen(true);
+  const handleToggleOrderDetails = (orderId: string) => {
+    setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
   };
 
   const isAdmin = userRole === "Admin" || userRole === "admin";
@@ -910,17 +821,17 @@ const DashboardPage = () => {
                     <CardTitle className="text-sm font-medium">
                       Pesanan Aktif
                     </CardTitle>
-                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <Package className="h-4 w-4 text-orange-500" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
+                    <div className="text-2xl font-bold text-orange-600">
                       {
                         orders.filter((order) => order.status === "confirmed")
                           .length
                       }
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Pesanan yang dikonfirmasi
+                      Perlu konfirmasi
                     </p>
                   </CardContent>
                 </Card>
@@ -982,7 +893,6 @@ const DashboardPage = () => {
                           <TableHead>Type Travel</TableHead>
                           <TableHead>Total</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Aksi</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1004,23 +914,12 @@ const DashboardPage = () => {
                               <TableCell>
                                 {getStatusBadge(order.status)}
                               </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleViewOrder(order)}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={6}
+                              colSpan={5}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada pesanan handling bandara
@@ -1201,7 +1100,7 @@ const DashboardPage = () => {
                 </Card>
               </div>
 
-              {/* All Orders Table */}
+              {/* All Orders Table with Expandable Rows */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-xl">Semua Pesanan</CardTitle>
@@ -1221,10 +1120,9 @@ const DashboardPage = () => {
                           <TableHead>Passenger</TableHead>
                           <TableHead>Payment Method</TableHead>
                           <TableHead>Payment Status</TableHead>
-                          <TableHead>Basic Price</TableHead>
+                          {/*      <TableHead>Basic Price1</TableHead> */}
                           <TableHead>Total</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Aksi</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1236,14 +1134,24 @@ const DashboardPage = () => {
                                 (booking.code_booking || booking.id) ===
                                 order.id,
                             );
-                            const basicPrice = originalBooking?.price || 0;
 
-                            return (
-                              <TableRow key={order.id}>
-                                <TableCell className="font-medium">
-                                  {order.id.length > 8
-                                    ? `${order.id.slice(0, 8)}...`
-                                    : order.id}
+                            {
+                              /*     const basicPrice = originalBooking?.price || 0; */
+                            }
+                            const isExpanded = expandedOrderId === order.id;
+
+                            const rows = [
+                              <TableRow
+                                key={`${order.id}-main`}
+                                className={`cursor-pointer hover:bg-gray-50 transition-colors ${
+                                  isExpanded ? "bg-blue-50" : ""
+                                }`}
+                                onClick={() =>
+                                  handleToggleOrderDetails(order.id)
+                                }
+                              >
+                                <TableCell className="font-xs">
+                                  {order.id}
                                 </TableCell>
                                 <TableCell>{order.customer_name}</TableCell>
                                 <TableCell className="max-w-xs truncate">
@@ -1276,47 +1184,353 @@ const DashboardPage = () => {
                                         : "Belum Bayar"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell>
+                                {/* <TableCell>
                                   {formatCurrency(basicPrice)}
-                                </TableCell>
+                                </TableCell>*/}
                                 <TableCell>
                                   {formatCurrency(order.total_amount)}
                                 </TableCell>
                                 <TableCell>
                                   {getStatusBadge(order.status)}
                                 </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center space-x-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleViewOrder(order)}
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                    {isAdmin && (
-                                      <>
-                                        <Button variant="ghost" size="sm">
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-red-600 hover:text-red-700"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
+                              </TableRow>,
+                            ];
+
+                            if (isExpanded) {
+                              rows.push(
+                                <TableRow key={`${order.id}-detail`}>
+                                  <TableCell colSpan={8} className="p-0">
+                                    <div className="bg-gray-50 border-t border-b border-gray-200 p-6">
+                                      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">
+                                          Detail Pesanan
+                                        </h3>
+
+                                        <div className="space-y-3">
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                ID Pesanan
+                                              </label>
+                                              <p className="text-sm font-mono mt-1">
+                                                {order.id}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Status
+                                              </label>
+                                              <div className="mt-1">
+                                                {getStatusBadge(order.status)}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Nama Customer
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {order.customer_name}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Type Travel
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {order.package_name}
+                                              </p>
+                                            </div>
+                                          </div>
+
+                                          {originalBooking?.flight_number && (
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Nomor Penerbangan
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {originalBooking.flight_number}
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Tanggal Pick Up
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {formatDate(
+                                                  order.departure_date,
+                                                )}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Waktu Jemput
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {order.pickup_time || "N/A"}
+                                              </p>
+                                            </div>
+                                          </div>
+
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Area Lokasi Penjemputan
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {originalBooking?.pickup_area ||
+                                                  "N/A"}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Area Lokasi Pengantaran
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {originalBooking?.dropoff_area ||
+                                                  "N/A"}
+                                              </p>
+                                            </div>
+                                          </div>
+
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Passenger
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {order.participants} orang
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Payment Method
+                                              </label>
+                                              <div className="text-sm mt-1">
+                                                <p>
+                                                  {order.payment_method ===
+                                                  "bank_transfer"
+                                                    ? "Bank Transfer"
+                                                    : order.payment_method ===
+                                                        "use_saldo"
+                                                      ? "Saldo"
+                                                      : order.payment_method ||
+                                                        "N/A"}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Discount Details Section */}
+                                          <div className="space-y-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                                            <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                                              Detail Potongan Harga
+                                            </h4>
+                                            {(() => {
+                                              if (!originalBooking) {
+                                                return (
+                                                  <p className="text-sm text-gray-500">
+                                                    Data booking tidak ditemukan
+                                                  </p>
+                                                );
+                                              }
+
+                                              // Get discount values from the booking data
+                                              const memberDiscount =
+                                                Number(
+                                                  originalBooking.member_discount,
+                                                ) || 0;
+                                              const userDiscount =
+                                                Number(
+                                                  originalBooking.user_discount,
+                                                ) || 0;
+                                              const passengers =
+                                                Number(order.participants) || 1;
+                                              const totalAmount =
+                                                Number(order.total_amount) || 0;
+
+                                              // Use harga_asli if available, otherwise calculate from basic price
+                                              const basicPrice =
+                                                Number(originalBooking.price) ||
+                                                0;
+                                              const originalTotalAmount =
+                                                Number(
+                                                  originalBooking.harga_asli,
+                                                ) || basicPrice * passengers;
+
+                                              // Calculate discount amounts step by step
+                                              let currentTotal =
+                                                originalTotalAmount;
+                                              let memberDiscountAmount = 0;
+                                              let userDiscountAmount = 0;
+
+                                              // Apply membership discount first
+                                              if (memberDiscount > 0) {
+                                                memberDiscountAmount =
+                                                  Math.round(
+                                                    (originalTotalAmount *
+                                                      memberDiscount) /
+                                                      100,
+                                                  );
+                                                currentTotal = Math.max(
+                                                  0,
+                                                  currentTotal -
+                                                    memberDiscountAmount,
+                                                );
+                                              }
+
+                                              // Apply user discount second
+                                              if (userDiscount > 0) {
+                                                const requestedUserDiscount =
+                                                  userDiscount * passengers;
+                                                userDiscountAmount = Math.min(
+                                                  requestedUserDiscount,
+                                                  currentTotal,
+                                                );
+                                                currentTotal = Math.max(
+                                                  0,
+                                                  currentTotal -
+                                                    userDiscountAmount,
+                                                );
+                                              }
+
+                                              const totalDiscountAmount =
+                                                memberDiscountAmount +
+                                                userDiscountAmount;
+                                              const hasDiscounts =
+                                                memberDiscount > 0 ||
+                                                userDiscount > 0;
+
+                                              if (!hasDiscounts) {
+                                                return (
+                                                  <div className="text-center py-4">
+                                                    <p className="text-sm text-gray-500">
+                                                      Tidak ada diskon yang
+                                                      diterapkan
+                                                    </p>
+                                                  </div>
+                                                );
+                                              }
+
+                                              return (
+                                                <>
+                                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                      <label className="text-sm font-medium text-gray-500">
+                                                        Diskon Member
+                                                      </label>
+                                                      <p className="text-sm text-green-600 font-medium mt-1">
+                                                        {memberDiscount > 0
+                                                          ? `${memberDiscount}%`
+                                                          : "Tidak ada"}
+                                                      </p>
+                                                      {memberDiscount > 0 && (
+                                                        <p className="text-sm text-gray-500">
+                                                          ={" "}
+                                                          {formatCurrency(
+                                                            memberDiscountAmount,
+                                                          )}
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <div>
+                                                      <label className="text-sm font-medium text-gray-500">
+                                                        Diskon User
+                                                      </label>
+                                                      <p className="text-sm text-green-600 font-medium mt-1">
+                                                        {userDiscount > 0
+                                                          ? `${formatCurrency(userDiscount)} per penumpang`
+                                                          : "Tidak ada"}
+                                                      </p>
+                                                      {userDiscount > 0 && (
+                                                        <p className="text-sm text-gray-500">
+                                                          ={" "}
+                                                          {formatCurrency(
+                                                            userDiscountAmount,
+                                                          )}{" "}
+                                                          total
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                      <label className="text-sm font-medium text-gray-500">
+                                                        Sub Total
+                                                      </label>
+                                                      <p className="text-sm text-gray-600 mt-1">
+                                                        {formatCurrency(
+                                                          originalTotalAmount,
+                                                        )}
+                                                      </p>
+                                                    </div>
+                                                    <div>
+                                                      <label className="text-sm font-medium text-gray-500">
+                                                        Total Potongan
+                                                      </label>
+                                                      <p className="text-sm text-red-600 font-medium mt-1">
+                                                        {totalDiscountAmount > 0
+                                                          ? `-${formatCurrency(totalDiscountAmount)}`
+                                                          : "Rp 0"}
+                                                      </p>
+                                                    </div>
+                                                  </div>
+                                                  <div className="pt-2 border-t">
+                                                    <div className="flex justify-between items-center">
+                                                      <label className="text-sm font-medium text-gray-700">
+                                                        Total Setelah Diskon
+                                                      </label>
+                                                      <p className="text-lg font-bold text-green-600">
+                                                        {formatCurrency(
+                                                          totalAmount,
+                                                        )}
+                                                      </p>
+                                                    </div>
+                                                    {totalDiscountAmount >
+                                                      0 && (
+                                                      <p className="text-sm text-green-600 text-center mt-1">
+                                                        Hemat{" "}
+                                                        {formatCurrency(
+                                                          totalDiscountAmount,
+                                                        )}
+                                                        !
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                </>
+                                              );
+                                            })()}
+                                          </div>
+
+                                          <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                              <label className="text-sm font-medium text-gray-500">
+                                                Tanggal Dibuat
+                                              </label>
+                                              <p className="text-sm mt-1">
+                                                {formatDate(order.created_at)}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>,
+                              );
+                            }
+
+                            return rows;
                           })
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={10}
+                              colSpan={8}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada pesanan handling bandara
@@ -1474,10 +1688,8 @@ const DashboardPage = () => {
                           Format yang didukung: JPG, PNG, PDF (Maksimal 5MB)
                         </p>
                         {transferProof && (
-                          <div className="flex items-center space-x-2 p-2 bg-green-50 rounded-md">
-                            <div className="text-sm text-green-700">
-                              ✓ File terpilih: {transferProof.name}
-                            </div>
+                          <div className="flex items-center space-x-2 p-2 bg-green-50 rounded text-sm text-green-700">
+                            ✓ File terpilih: {transferProof.name}
                           </div>
                         )}
                       </div>
@@ -1744,7 +1956,7 @@ const DashboardPage = () => {
                 <CardHeader>
                   <CardTitle className="text-xl">Riwayat Transaksi</CardTitle>
                   <CardDescription>
-                    Riwayat top up dan penggunaan saldo
+                    Riwayat top up dan penggunaan saldo untuk pembayaran booking
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1753,16 +1965,18 @@ const DashboardPage = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Tanggal</TableHead>
-                          <TableHead>Jenis Transaksi</TableHead>
+                          <TableHead>ID Booking</TableHead>
                           <TableHead>Deskripsi</TableHead>
-                          <TableHead>Jumlah</TableHead>
-                          <TableHead>Saldo Akhir</TableHead>
+                          <TableHead>Saldo Awal</TableHead>
+                          <TableHead>Jumlah Dipotong</TableHead>
+                          <TableHead>Saldo Setelah</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {loadingTransactionHistory ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-8">
+                            <TableCell colSpan={6} className="text-center py-8">
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
                               Loading...
                             </TableCell>
@@ -1775,18 +1989,8 @@ const DashboardPage = () => {
                                   ? formatDate(transaction.trans_date)
                                   : "N/A"}
                               </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    transaction.nominal > 0
-                                      ? "default"
-                                      : "secondary"
-                                  }
-                                >
-                                  {transaction.nominal > 0
-                                    ? "Top Up"
-                                    : "Pembayaran"}
-                                </Badge>
+                              <TableCell className="font-mono">
+                                {transaction.kode_booking || "N/A"}
                               </TableCell>
                               <TableCell>
                                 {buildTxnDescription(
@@ -1806,6 +2010,9 @@ const DashboardPage = () => {
                               </TableCell>
                               <TableCell>
                                 {formatCurrency(transaction.saldo_akhir)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="default">Berhasil</Badge>
                               </TableCell>
                             </TableRow>
                           ))
@@ -2241,6 +2448,28 @@ const DashboardPage = () => {
                             </div>
                             <div>
                               <label className="text-sm font-medium text-gray-500">
+                                Status Memberships
+                              </label>
+                              <div className="text-sm text-gray-900">
+                                <Badge
+                                  variant={
+                                    agentProfile.member_is_active === true
+                                      ? "default"
+                                      : agentProfile.member_is_active === false
+                                        ? "destructive"
+                                        : "secondary"
+                                  }
+                                >
+                                  {agentProfile.member_is_active === true
+                                    ? "Active"
+                                    : agentProfile.member_is_active === false
+                                      ? "Inactive"
+                                      : "N/A"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-500">
                                 Tanggal Bergabung
                               </label>
                               <p className="text-sm text-gray-900">
@@ -2350,187 +2579,6 @@ const DashboardPage = () => {
           )}
         </main>
       </div>
-
-      {/* Order Details Modal */}
-      <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Detail Pesanan</DialogTitle>
-            <DialogDescription>
-              Informasi lengkap pesanan handling bandara
-            </DialogDescription>
-          </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    ID Pesanan
-                  </label>
-                  <p className="text-sm font-mono">{selectedOrder.id}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Status
-                  </label>
-                  <div className="mt-1">
-                    {getStatusBadge(selectedOrder.status)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Nama Customer
-                  </label>
-                  <p className="text-sm">{selectedOrder.customer_name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Type Travel
-                  </label>
-                  <p className="text-sm">{selectedOrder.package_name}</p>
-                </div>
-              </div>
-
-              {(selectedOrder as any).flight_number && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Nomor Penerbangan
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).flight_number}
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Tanggal Pick Up
-                  </label>
-                  <p className="text-sm">
-                    {formatDate(selectedOrder.departure_date)}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Waktu Jemput
-                  </label>
-                  <p className="text-sm">
-                    {selectedOrder.pickup_time || "N/A"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Area Lokasi Penjemputan
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).pickup_area || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Area Lokasi Pengantaran
-                  </label>
-                  <p className="text-sm">
-                    {(selectedOrder as any).dropoff_area || "N/A"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Passenger
-                  </label>
-                  <p className="text-sm">{selectedOrder.participants} orang</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Payment Method
-                  </label>
-                  <div className="text-sm">
-                    <p>
-                      {selectedOrder.payment_method === "bank_transfer"
-                        ? "Bank Transfer"
-                        : selectedOrder.payment_method === "use_saldo"
-                          ? "Saldo"
-                          : selectedOrder.payment_method || "N/A"}
-                    </p>
-                    {selectedOrder.payment_method === "bank_transfer" &&
-                      (selectedOrder as any).bank_name && (
-                        <p className="text-gray-600 mt-1">
-                          {(selectedOrder as any).bank_name}
-                        </p>
-                      )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Total
-                  </label>
-                  <p className="text-lg font-semibold text-green-600">
-                    {formatCurrency(selectedOrder.total_amount)}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">
-                    Tanggal Dibuat
-                  </label>
-                  <p className="text-sm">
-                    {formatDate(selectedOrder.created_at)}
-                  </p>
-                </div>
-              </div>
-
-              {selectedOrder.payment_method === "bank_transfer" && (
-                <>
-                  {(selectedOrder as any).destination_account && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        No Bank Tujuan
-                      </label>
-                      <p className="text-sm">
-                        {(selectedOrder as any).destination_account}
-                      </p>
-                    </div>
-                  )}
-
-                  {(selectedOrder as any).sender_account && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Rekening Pengirim
-                      </label>
-                      <p className="text-sm">
-                        {(selectedOrder as any).sender_account}
-                      </p>
-                    </div>
-                  )}
-
-                  {(selectedOrder as any).sender_bank && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Bank Pengirim
-                      </label>
-                      <p className="text-sm">
-                        {(selectedOrder as any).sender_bank}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

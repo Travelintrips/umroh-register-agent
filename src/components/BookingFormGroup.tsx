@@ -40,6 +40,8 @@ import {
   Clock,
   Users,
   DollarSign,
+  Download,
+  Printer,
 } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { supabase } from "../lib/supabase";
@@ -75,6 +77,8 @@ const formSchema = z
     nomor_penerbangan: z
       .string()
       .min(2, { message: "Nomor penerbangan diperlukan" }),
+    negara: z.string().min(1, { message: "Pilih negara" }),
+    kota: z.string().min(1, { message: "Pilih kota" }),
     jenis_perjalanan: z
       .array(z.string())
       .min(1, { message: "Pilih minimal satu jenis perjalanan" }),
@@ -123,15 +127,6 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-const locationOptions = [
-  "Terminal 2F – International Arrival Hall",
-  "Terminal 3 – International Arrival (Gate G6 / Area Umum)",
-  "Terminal 2F – International Departure Check-in",
-  "Terminal 3 – International Departure (Check-in & Imigrasi)",
-  "Terminal 2F – International Transfer Desk",
-  "Terminal 3 – International Transfer Area",
-];
-
 const travelTypes = [
   { id: "arrival", label: "Arrival", dbId: 40, tripType: "arrival" },
   { id: "departure", label: "Departure", dbId: 41, tripType: "departure" },
@@ -152,6 +147,10 @@ const BookingFormGroup = () => {
     cap: number | null;
     active: boolean;
   }>({ kind: null, value: null, cap: null, active: false });
+  const [membershipDiscount, setMembershipDiscount] = useState<{
+    percentage: number;
+    active: boolean;
+  }>({ percentage: 0, active: false });
   const [servicePrices, setServicePrices] = useState<{ [key: string]: number }>(
     {},
   );
@@ -170,6 +169,11 @@ const BookingFormGroup = () => {
   const [bookingCode, setBookingCode] = useState<string>("");
   const [discountKind, setDiscountKind] = useState<string>("");
   const [discountValue, setDiscountValue] = useState<number>(0);
+  const [countries, setCountries] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [selectedCity, setSelectedCity] = useState<string>("");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -180,6 +184,8 @@ const BookingFormGroup = () => {
       no_telepon: "",
       jumlah_penumpang: 1,
       nomor_penerbangan: "",
+      negara: "",
+      kota: "",
       jenis_perjalanan: [],
       additional_baggage: 0,
       area_penjemputan: "",
@@ -210,6 +216,23 @@ const BookingFormGroup = () => {
             )
             .eq("id", session.user.id)
             .single();
+
+          // Fetch membership discount
+          const { data: membership, error: membershipError } = await supabase
+            .from("memberships")
+            .select("discount_percentage, is_active")
+            .eq("agent_id", session.user.id)
+            .eq("is_active", true)
+            .single();
+
+          if (membershipError && membershipError.code !== "PGRST116") {
+            console.error("Error fetching membership:", membershipError);
+          } else if (membership) {
+            setMembershipDiscount({
+              percentage: membership.discount_percentage || 0,
+              active: membership.is_active || false,
+            });
+          }
 
           if (error) {
             console.error("Error fetching user profile:", error);
@@ -336,10 +359,104 @@ const BookingFormGroup = () => {
       }
     };
 
+    const fetchCountries = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("countries")
+          .select("code, name")
+          .order("name");
+
+        if (error) {
+          console.error("Error fetching countries:", error);
+        } else {
+          setCountries(data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching countries:", error);
+      }
+    };
+
     fetchUserData();
     fetchServicePrices();
     fetchBankTransferMethods();
+    fetchCountries();
   }, []);
+
+  // Fetch cities when country changes
+  useEffect(() => {
+    const fetchCities = async () => {
+      if (!selectedCountry) {
+        setCities([]);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("cities")
+          .select("id, name")
+          .eq("country_code", selectedCountry)
+          .order("name");
+
+        if (error) {
+          console.error("Error fetching cities:", error);
+        } else {
+          setCities(data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching cities:", error);
+      }
+    };
+
+    fetchCities();
+  }, [selectedCountry]);
+
+  // Fetch locations when city changes
+  useEffect(() => {
+    const fetchLocations = async () => {
+      if (!selectedCity) {
+        setLocations([]);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("locations")
+          .select("id, name")
+          .eq("city_id", selectedCity)
+          .order("name");
+
+        if (error) {
+          console.error("Error fetching locations:", error);
+        } else {
+          setLocations(data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching locations:", error);
+      }
+    };
+
+    fetchLocations();
+  }, [selectedCity]);
+
+  const handleCountryChange = (countryCode: string) => {
+    setSelectedCountry(countryCode);
+    form.setValue("negara", countryCode);
+    form.setValue("kota", ""); // Reset city when country changes
+    form.setValue("area_penjemputan", ""); // Reset pickup location
+    form.setValue("area_pengantaran", ""); // Reset dropoff location
+    setCities([]);
+    setLocations([]);
+    setSelectedCity("");
+  };
+
+  const handleCityChange = (cityId: string) => {
+    const selectedCityData = cities.find((city) => city.id === cityId);
+    setSelectedCity(cityId);
+    form.setValue("kota", selectedCityData?.name || "");
+    form.setValue("area_penjemputan", ""); // Reset pickup location
+    form.setValue("area_pengantaran", ""); // Reset dropoff location
+    setLocations([]);
+  };
 
   const onSubmit = async (data: FormValues) => {
     setFormData(data);
@@ -411,7 +528,7 @@ const BookingFormGroup = () => {
 
       // Determine booking status based on payment method
       const bookingStatus =
-        selectedPaymentMethod === "use_saldo" ? "completed" : "pending";
+        selectedPaymentMethod === "use_saldo" ? "confirmed" : "pending";
 
       // Get selected bank name if bank transfer is selected
       const selectedBank = bankTransferMethods.find(
@@ -420,6 +537,42 @@ const BookingFormGroup = () => {
       const bankName =
         selectedPaymentMethod === "bank_transfer" && selectedBank
           ? selectedBank.name
+          : null;
+
+      // Calculate discount amounts to save to database
+      const memberDiscountAmount =
+        membershipDiscount.active && membershipDiscount.percentage > 0
+          ? (originalTotalAmount * membershipDiscount.percentage) / 100
+          : 0;
+
+      const userDiscountAmount =
+        userDiscount.active && userDiscount.value
+          ? userDiscount.value * formData.jumlah_penumpang
+          : 0;
+
+      // Format additional baggage data
+      const additionalBaggageData =
+        formData.additional_baggage && formData.additional_baggage > 0
+          ? (() => {
+              const selectedTypes = formData.jenis_perjalanan || [];
+              let baggagePrice = 0;
+
+              // Calculate baggage price based on selected travel types
+              if (
+                selectedTypes.includes("arrival") &&
+                selectedTypes.includes("departure")
+              ) {
+                baggagePrice = additionalPrices.arrival_departure || 0;
+              } else {
+                selectedTypes.forEach((type: string) => {
+                  if (additionalPrices[type]) {
+                    baggagePrice += additionalPrices[type];
+                  }
+                });
+              }
+
+              return `${formData.additional_baggage} x ${baggagePrice}`;
+            })()
           : null;
 
       // Prepare data for handling_bookings table
@@ -438,8 +591,8 @@ const BookingFormGroup = () => {
         pickup_time: formData.waktu_pickup,
         passengers: formData.jumlah_penumpang,
         additional_notes: formData.catatan_tambahan,
-        price: totalServicePrice, // Basic price (subtotal per penumpang)
-        total_amount: totalAmount, // Discounted total amount
+        price: totalServicePrice, // Basic price per passenger
+        total_amount: totalAmount, // Final discounted total amount
         status: bookingStatus,
         code_booking: generatedBookingCode,
         created_at: new Date().toISOString(),
@@ -449,8 +602,15 @@ const BookingFormGroup = () => {
         company_name: formData.nama_perusahaan,
         payment_status: paymentStatus,
         passenger_area: formData.area_penjemputan, // Required field based on schema
-        total_price: totalAmount, // Discounted total amount
+        total_price: totalAmount, // Final discounted total amount
         bank_name: bankName, // Add selected bank name
+        // Add discount information - save the exact values used in calculation
+        member_discount: membershipDiscount.active
+          ? membershipDiscount.percentage
+          : null,
+        user_discount: userDiscount.active ? userDiscount.value : null,
+        harga_asli: originalTotalAmount, // Store original price before discounts
+        bagasi_tambahan: additionalBaggageData, // Additional baggage in format "quantity x price"
       };
 
       // Insert data into handling_bookings table
@@ -707,20 +867,25 @@ const BookingFormGroup = () => {
   };
 
   const calculateDiscountedPrice = (originalPrice: number) => {
-    if (!userDiscount.active || !userDiscount.value) {
-      return originalPrice;
+    let discountedPrice = originalPrice;
+
+    // Apply membership discount first (percentage of original price)
+    if (membershipDiscount.active && membershipDiscount.percentage > 0) {
+      const membershipDiscountAmount =
+        (originalPrice * membershipDiscount.percentage) / 100;
+      discountedPrice = Math.max(0, discountedPrice - membershipDiscountAmount);
     }
 
-    // Calculate discount per passenger
-    const jumlahPenumpang = form.watch("jumlah_penumpang") || 1;
-    const discountPerPassenger = Math.floor(userDiscount.value);
-    const totalDiscount = discountPerPassenger * jumlahPenumpang;
+    // Apply user discount second (per passenger)
+    if (userDiscount.active && userDiscount.value) {
+      const jumlahPenumpang = form.watch("jumlah_penumpang") || 1;
+      const discountPerPassenger = Math.floor(userDiscount.value);
+      const totalDiscount = discountPerPassenger * jumlahPenumpang;
+      const finalDiscount = Math.min(totalDiscount, discountedPrice);
+      discountedPrice = Math.max(0, discountedPrice - finalDiscount);
+    }
 
-    // Ensure discount doesn't exceed original price
-    const finalDiscount = Math.min(totalDiscount, originalPrice);
-
-    const finalTotal = Math.max(0, originalPrice - finalDiscount);
-    return finalTotal;
+    return discountedPrice;
   };
 
   const handleDiscountSave = async () => {
@@ -804,6 +969,309 @@ const BookingFormGroup = () => {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const handlePrintInvoice = () => {
+    if (!formData || !bookingCode) return;
+
+    // Create a new window for printing
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const totalServicePrice = calculateTotalPrice();
+    const additionalBaggagePrice = calculateAdditionalBaggagePrice();
+    const originalTotalAmount =
+      totalServicePrice * formData.jumlah_penumpang + additionalBaggagePrice;
+    const totalAmount =
+      form.watch("total_after_discount") ||
+      calculateDiscountedPrice(originalTotalAmount);
+    const selectedBank = bankTransferMethods.find(
+      (bank) => bank.id.toString() === selectedBankMethod,
+    );
+
+    // Generate invoice HTML
+    const invoiceHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice - ${bookingCode}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { margin-bottom: 30px; border-bottom: 2px solid #16a34a; padding-bottom: 20px; position: relative; }
+          .section { margin-bottom: 25px; }
+          .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #16a34a; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+          .info-item { margin-bottom: 8px; }
+          .info-label { font-weight: bold; color: #6b7280; font-size: 14px; }
+          .info-value { margin-top: 2px; }
+          .payment-details { background: #f8fafc; padding: 15px; border-radius: 5px; border: 1px solid #e2e8f0; }
+          .price-row { display: flex; justify-content: space-between; margin-bottom: 8px; padding: 5px 0; }
+          .price-row.total { font-weight: bold; font-size: 16px; border-top: 2px solid #16a34a; padding-top: 10px; margin-top: 10px; color: #16a34a; }
+          .discount { color: #16a34a; font-weight: bold; }
+          .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+          @media print { body { margin: 0; } }
+          
+          /* Header Layout */
+          .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+          }
+          
+          .header-left {
+            flex: 1;
+          }
+          
+          .header-center {
+            flex: 2;
+            text-align: center;
+          }
+          
+          .header-right {
+            flex: 1;
+            text-align: right;
+          }
+          
+          .company-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #16a34a;
+            margin: 0;
+            line-height: 1.2;
+          }
+          
+          .invoice-title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+            line-height: 1.2;
+          }
+          
+          .booking-code {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+            line-height: 1.2;
+          }
+          
+          .invoice-subtitle {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+          }
+
+
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-container">
+            <div class="header-left">
+              <div class="company-name">Travelintrips Handling Airport</div>
+            </div>
+            <div class="header-center">
+              <div class="invoice-title">INVOICE PESANAN GROUP</div>
+            </div>
+            <div class="header-right">
+              <div class="booking-code">Invoice - ${bookingCode}</div>
+            </div>
+          </div>
+        </div>
+
+
+
+        <div class="section">
+          <div class="section-title">Informasi Pelanggan</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Nama Perusahaan:</div>
+              <div class="info-value">${formData.nama_perusahaan}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Nama Lengkap:</div>
+              <div class="info-value">${formData.nama_lengkap}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Email:</div>
+              <div class="info-value">${formData.email}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">No. Telepon:</div>
+              <div class="info-value">${formData.no_telepon}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Detail Pesanan</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Jumlah Penumpang:</div>
+              <div class="info-value">${formData.jumlah_penumpang} orang</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Jumlah Bagasi:</div>
+              <div class="info-value">${formData.additional_baggage || 0} bagasi</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Nomor Penerbangan:</div>
+              <div class="info-value">${formData.nomor_penerbangan}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Jenis Perjalanan:</div>
+              <div class="info-value">${formData.jenis_perjalanan
+                .map((type) => {
+                  const travelType = travelTypes.find((t) => t.id === type);
+                  return travelType?.label;
+                })
+                .join(", ")}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Area Penjemputan:</div>
+              <div class="info-value">${formData.area_penjemputan}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Area Pengantaran:</div>
+              <div class="info-value">${formData.area_pengantaran}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Tanggal & Waktu Pickup:</div>
+              <div class="info-value">${formData.tanggal_pickup} - ${formData.waktu_pickup}</div>
+            </div>
+            ${
+              formData.catatan_tambahan
+                ? `
+            <div class="info-item" style="grid-column: 1 / -1;">
+              <div class="info-label">Catatan Tambahan:</div>
+              <div class="info-value">${formData.catatan_tambahan}</div>
+            </div>
+            `
+                : ""
+            }
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Detail Pembayaran</div>
+          <div class="payment-details">
+            <div class="price-row">
+              <span>Metode Pembayaran:</span>
+              <span>${
+                selectedPaymentMethod === "cash"
+                  ? "Cash"
+                  : selectedPaymentMethod === "use_saldo"
+                    ? "Saldo"
+                    : "Bank Transfer"
+              }</span>
+            </div>
+            ${
+              selectedPaymentMethod === "bank_transfer" && selectedBank
+                ? `
+            <div class="price-row">
+              <span>Bank:</span>
+              <span>${selectedBank.name}</span>
+            </div>
+            <div class="price-row">
+              <span>A/N:</span>
+              <span>${selectedBank.account_holder}</span>
+            </div>
+            <div class="price-row">
+              <span>No. Rekening:</span>
+              <span>${selectedBank.account_number}</span>
+            </div>
+            `
+                : ""
+            }
+            <hr style="margin: 10px 0; border: none; border-top: 1px solid #e5e7eb;">
+            ${formData.jenis_perjalanan
+              .map((type) => {
+                const travelType = travelTypes.find((t) => t.id === type);
+                const price = servicePrices[type];
+                return `<div class="price-row">
+                <span>${travelType?.label}</span>
+                <span>${formatCurrency(price || 0)}</span>
+              </div>`;
+              })
+              .join("")}
+            <div class="price-row">
+              <span>Subtotal per penumpang:</span>
+              <span>${formatCurrency(totalServicePrice)}</span>
+            </div>
+            <div class="price-row">
+              <span>Jumlah penumpang:</span>
+              <span>${formData.jumlah_penumpang} orang</span>
+            </div>
+            ${
+              additionalBaggagePrice > 0
+                ? `
+            <div class="price-row">
+              <span>${formData.additional_baggage} bagasi tambahan:</span>
+              <span>${formatCurrency(additionalBaggagePrice)}</span>
+            </div>
+            `
+                : ""
+            }
+            ${(() => {
+              const hasDiscount =
+                (userDiscount.active || membershipDiscount.active) &&
+                totalAmount < originalTotalAmount;
+              if (hasDiscount) {
+                let discountHTML = `
+                <div class="price-row" style="text-decoration: line-through; color: #6b7280;">
+                  <span>Subtotal:</span>
+                  <span>${formatCurrency(originalTotalAmount)}</span>
+                </div>`;
+
+                if (userDiscount.active && userDiscount.value) {
+                  discountHTML += `
+                  <div class="price-row discount">
+                    <span>${getDiscountLabel()}:</span>
+                    <span>-${formatCurrency(userDiscount.value * (form.watch("jumlah_penumpang") || 1))}</span>
+                  </div>`;
+                }
+
+                if (
+                  membershipDiscount.active &&
+                  membershipDiscount.percentage > 0
+                ) {
+                  discountHTML += `
+                  <div class="price-row discount">
+                    <span>Diskon Membership ${membershipDiscount.percentage}%:</span>
+                    <span>-${formatCurrency((originalTotalAmount * membershipDiscount.percentage) / 100)}</span>
+                  </div>`;
+                }
+
+                return discountHTML;
+              }
+              return "";
+            })()}
+            <div class="price-row total">
+              <span>Total Pembayaran:</span>
+              <span>${formatCurrency(totalAmount)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Terima kasih telah menggunakan layanan Handling</p>
+          <p>Hubungi kami di info@travelintrips.com untuk bantuan lebih lanjut</p>
+          <p>© ${new Date().getFullYear()} Travelintrips. All rights reserved.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Write HTML to the new window and trigger print
+    printWindow.document.write(invoiceHTML);
+    printWindow.document.close();
+
+    // Wait for content to load then print
+    printWindow.onload = () => {
+      printWindow.print();
+    };
   };
 
   if (loading) {
@@ -954,6 +1422,14 @@ const BookingFormGroup = () => {
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-600">
+                  Jumlah Bagasi
+                </Label>
+                <p className="text-sm font-semibold">
+                  {formData.additional_baggage || 0} bagasi
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">
                   Nomor Penerbangan
                 </Label>
                 <p className="text-sm font-semibold">
@@ -1066,9 +1542,16 @@ const BookingFormGroup = () => {
                   <span>Jumlah penumpang:</span>
                   <span>{formData.jumlah_penumpang} orang</span>
                 </div>
+                {additionalBaggagePrice > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>{formData.additional_baggage} bagasi tambahan:</span>
+                    <span>{formatCurrency(additionalBaggagePrice)}</span>
+                  </div>
+                )}
                 {(() => {
                   const hasDiscount =
-                    userDiscount.active && totalAmount < originalTotalAmount;
+                    (userDiscount.active || membershipDiscount.active) &&
+                    totalAmount < originalTotalAmount;
                   return hasDiscount ? (
                     <>
                       <div className="flex justify-between text-sm">
@@ -1079,27 +1562,51 @@ const BookingFormGroup = () => {
                           {formatCurrency(originalTotalAmount)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm text-green-600 font-medium">
-                        <span>{getDiscountLabel()}:</span>
-                        <span>
-                          -{formatCurrency(originalTotalAmount - totalAmount)}
-                        </span>
-                      </div>
+                      {userDiscount.active && userDiscount.value && (
+                        <div className="flex justify-between text-sm text-green-600 font-medium">
+                          <span>{getDiscountLabel()}:</span>
+                          <span>
+                            -
+                            {formatCurrency(
+                              userDiscount.value *
+                                (form.watch("jumlah_penumpang") || 1),
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {membershipDiscount.active &&
+                        membershipDiscount.percentage > 0 && (
+                          <div className="flex justify-between text-sm text-green-600 font-medium">
+                            <span>
+                              Diskon Membership {membershipDiscount.percentage}%
+                              ({form.watch("jumlah_penumpang") || 1} penumpang):
+                            </span>
+                            <span>
+                              -
+                              {formatCurrency(
+                                (originalTotalAmount *
+                                  membershipDiscount.percentage) /
+                                  100,
+                              )}
+                            </span>
+                          </div>
+                        )}
                     </>
                   ) : null;
                 })()}
                 <Separator />
                 <div
-                  className={`flex justify-between text-xl font-bold ${userDiscount.active && totalAmount < originalTotalAmount ? "text-green-900" : "text-blue-900"}`}
+                  className={`flex justify-between text-xl font-bold ${(userDiscount.active || membershipDiscount.active) && totalAmount < originalTotalAmount ? "text-green-900" : "text-blue-900"}`}
                 >
                   <span>Total Pembayaran:</span>
                   <span>{formatCurrency(totalAmount)}</span>
                 </div>
-                {userDiscount.active && totalAmount < originalTotalAmount && (
-                  <div className="text-sm text-green-600 font-medium text-center mt-2">
-                    Hemat {formatCurrency(originalTotalAmount - totalAmount)}!
-                  </div>
-                )}
+                {(userDiscount.active || membershipDiscount.active) &&
+                  totalAmount < originalTotalAmount && (
+                    <div className="text-sm text-green-600 font-medium text-center mt-2">
+                      Hemat {formatCurrency(originalTotalAmount - totalAmount)}!
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1107,20 +1614,31 @@ const BookingFormGroup = () => {
           <Separator />
 
           {/* Discount Information - Only show if discount is active */}
-          {userDiscount.active && totalAmount < originalTotalAmount && (
-            <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center justify-center mb-2">
-                <span className="font-semibold text-green-800">
-                  🎉 Selamat! Anda mendapat {getDiscountLabel()}
-                </span>
+          {(userDiscount.active || membershipDiscount.active) &&
+            totalAmount < originalTotalAmount && (
+              <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  <span className="font-semibold text-green-800">
+                    🎉 Selamat! Anda mendapat diskon
+                  </span>
+                </div>
+                {userDiscount.active && userDiscount.value && (
+                  <p className="text-sm text-green-700">
+                    Diskon Agent: {getDiscountLabel()}
+                  </p>
+                )}
+                {membershipDiscount.active &&
+                  membershipDiscount.percentage > 0 && (
+                    <p className="text-sm text-green-700">
+                      Diskon Membership: {membershipDiscount.percentage}%
+                    </p>
+                  )}
+                <p className="text-sm text-green-700 font-semibold mt-2">
+                  Total hemat:{" "}
+                  {formatCurrency(originalTotalAmount - totalAmount)}
+                </p>
               </div>
-              <p className="text-sm text-green-700">
-                Anda menghemat{" "}
-                {formatCurrency(originalTotalAmount - totalAmount)} dari pesanan
-                ini!
-              </p>
-            </div>
-          )}
+            )}
 
           <Separator />
 
@@ -1141,15 +1659,24 @@ const BookingFormGroup = () => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex justify-between pt-6">
+          <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6">
             <Button
               variant="outline"
               type="button"
               onClick={handleBackToSummary}
+              className="w-full sm:w-auto"
             >
               ← Kembali
             </Button>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                onClick={handlePrintInvoice}
+                variant="outline"
+                className="bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 w-full sm:w-auto"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Cetak/Download Invoice
+              </Button>
               <Button
                 onClick={() => {
                   setShowOrderDetails(false);
@@ -1160,11 +1687,14 @@ const BookingFormGroup = () => {
                   setBookingCode("");
                   setSubmitError(null);
                 }}
+                className="w-full sm:w-auto"
               >
                 Buat Pesanan Baru
               </Button>
               <Link to="/">
-                <Button variant="outline">Kembali ke Beranda</Button>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  Kembali ke Beranda
+                </Button>
               </Link>
             </div>
           </div>
@@ -1238,6 +1768,14 @@ const BookingFormGroup = () => {
                 </Label>
                 <p className="text-sm font-semibold">
                   {formData.jumlah_penumpang} orang
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">
+                  Jumlah Bagasi Tambahan
+                </Label>
+                <p className="text-sm">
+                  {formData.additional_baggage || 0} bagasi
                 </p>
               </div>
               <div>
@@ -1316,9 +1854,16 @@ const BookingFormGroup = () => {
                   <span>Jumlah penumpang:</span>
                   <span>{formData.jumlah_penumpang} orang</span>
                 </div>
+                {additionalBaggagePrice > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>{formData.additional_baggage} bagasi tambahan:</span>
+                    <span>{formatCurrency(additionalBaggagePrice)}</span>
+                  </div>
+                )}
                 {(() => {
                   const hasDiscount =
-                    userDiscount.active && totalAmount < originalTotalAmount;
+                    (userDiscount.active || membershipDiscount.active) &&
+                    totalAmount < originalTotalAmount;
                   return hasDiscount ? (
                     <>
                       <div className="flex justify-between text-sm">
@@ -1329,27 +1874,51 @@ const BookingFormGroup = () => {
                           {formatCurrency(originalTotalAmount)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm text-green-600 font-medium">
-                        <span>{getDiscountLabel()}:</span>
-                        <span>
-                          -{formatCurrency(originalTotalAmount - totalAmount)}
-                        </span>
-                      </div>
+                      {userDiscount.active && userDiscount.value && (
+                        <div className="flex justify-between text-sm text-green-600 font-medium">
+                          <span>{getDiscountLabel()}:</span>
+                          <span>
+                            -
+                            {formatCurrency(
+                              userDiscount.value *
+                                (formData.jumlah_penumpang || 1),
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {membershipDiscount.active &&
+                        membershipDiscount.percentage > 0 && (
+                          <div className="flex justify-between text-sm text-green-600 font-medium">
+                            <span>
+                              Diskon Membership {membershipDiscount.percentage}%
+                              {/*    ({formData.jumlah_penumpang} penumpang): */}
+                            </span>
+                            <span>
+                              -
+                              {formatCurrency(
+                                (originalTotalAmount *
+                                  membershipDiscount.percentage) /
+                                  100,
+                              )}
+                            </span>
+                          </div>
+                        )}
                     </>
                   ) : null;
                 })()}
                 <Separator />
                 <div
-                  className={`flex justify-between text-lg font-bold ${userDiscount.active && totalAmount < originalTotalAmount ? "text-green-900" : "text-blue-900"}`}
+                  className={`flex justify-between text-lg font-bold ${(userDiscount.active || membershipDiscount.active) && totalAmount < originalTotalAmount ? "text-green-900" : "text-blue-900"}`}
                 >
                   <span>Total Pembayaran:</span>
                   <span>{formatCurrency(totalAmount)}</span>
                 </div>
-                {userDiscount.active && totalAmount < originalTotalAmount && (
-                  <div className="text-sm text-green-600 font-medium text-center">
-                    Hemat {formatCurrency(originalTotalAmount - totalAmount)}!
-                  </div>
-                )}
+                {(userDiscount.active || membershipDiscount.active) &&
+                  totalAmount < originalTotalAmount && (
+                    <div className="text-sm text-green-600 font-medium text-center">
+                      Hemat {formatCurrency(originalTotalAmount - totalAmount)}!
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1567,8 +2136,8 @@ const BookingFormGroup = () => {
                 Buat Pesanan Group
               </CardTitle>
               <CardDescription className="text-center">
-                Lengkapi form di bawah ini untuk membuat pesanan handling umroh
-                group
+                Lengkapi form di bawah ini untuk membuat pesanan handling
+                Airport group
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1706,7 +2275,7 @@ const BookingFormGroup = () => {
                     <h3 className="text-base sm:text-lg font-semibold mb-4">
                       Informasi Penerbangan
                     </h3>
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="nomor_penerbangan"
@@ -1716,6 +2285,85 @@ const BookingFormGroup = () => {
                             <FormControl>
                               <Input placeholder="Contoh: GA123" {...field} />
                             </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="negara"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Negara*</FormLabel>
+                            <Select
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                handleCountryChange(value);
+                              }}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Pilih negara" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {countries.map((country) => (
+                                  <SelectItem
+                                    key={country.code}
+                                    value={country.code}
+                                  >
+                                    {country.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="kota"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Kota*</FormLabel>
+                            <Select
+                              onValueChange={(value) => {
+                                const selectedCityData = cities.find(
+                                  (city) => city.name === value,
+                                );
+                                field.onChange(value);
+                                if (selectedCityData) {
+                                  handleCityChange(selectedCityData.id);
+                                }
+                              }}
+                              defaultValue={field.value}
+                              disabled={!selectedCountry || cities.length === 0}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={
+                                      !selectedCountry
+                                        ? "Pilih negara terlebih dahulu"
+                                        : cities.length === 0
+                                          ? "Tidak ada kota tersedia"
+                                          : "Pilih kota"
+                                    }
+                                  />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {cities.map((city) => (
+                                  <SelectItem key={city.id} value={city.name}>
+                                    {city.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1853,11 +2501,46 @@ const BookingFormGroup = () => {
                                     baseServicePrice * jumlahPenumpang;
                                   const totalWithBaggage =
                                     baseTotal + additionalBaggagePrice;
-                                  const discountedTotal =
-                                    calculateDiscountedPrice(totalWithBaggage);
-                                  const hasDiscount =
+
+                                  // Calculate discounts step by step
+                                  let currentTotal = totalWithBaggage;
+                                  let userDiscountAmount = 0;
+                                  let membershipDiscountAmount = 0;
+
+                                  // Apply membership discount first (percentage of original total)
+                                  if (
+                                    membershipDiscount.active &&
+                                    membershipDiscount.percentage > 0
+                                  ) {
+                                    membershipDiscountAmount =
+                                      (totalWithBaggage *
+                                        membershipDiscount.percentage) /
+                                      100;
+                                    currentTotal = Math.max(
+                                      0,
+                                      currentTotal - membershipDiscountAmount,
+                                    );
+                                  }
+
+                                  // Apply user discount to remaining amount
+                                  if (
                                     userDiscount.active &&
-                                    discountedTotal < totalWithBaggage;
+                                    userDiscount.value
+                                  ) {
+                                    userDiscountAmount = Math.min(
+                                      userDiscount.value * jumlahPenumpang,
+                                      currentTotal,
+                                    );
+                                    currentTotal = Math.max(
+                                      0,
+                                      currentTotal - userDiscountAmount,
+                                    );
+                                  }
+
+                                  const finalTotal = currentTotal;
+                                  const hasDiscount =
+                                    userDiscountAmount > 0 ||
+                                    membershipDiscountAmount > 0;
 
                                   return (
                                     <div className="space-y-2">
@@ -1883,18 +2566,49 @@ const BookingFormGroup = () => {
                                         </div>
                                       )}
                                       {hasDiscount && (
-                                        <div className="flex items-center justify-between text-sm">
-                                          <span className="text-green-600 font-medium">
-                                            {getDiscountLabel()}:
-                                          </span>
-                                          <span className="text-green-600 font-medium">
-                                            -
-                                            {formatCurrency(
-                                              totalWithBaggage -
-                                                discountedTotal,
-                                            )}
-                                          </span>
-                                        </div>
+                                        <>
+                                          <div className="flex items-center justify-between text-sm">
+                                            <span className="text-gray-600 line-through">
+                                              Subtotal:
+                                            </span>
+                                            <span className="text-gray-600 line-through">
+                                              {formatCurrency(totalWithBaggage)}
+                                            </span>
+                                          </div>
+                                          {membershipDiscountAmount > 0 && (
+                                            <div className="flex items-center justify-between text-sm">
+                                              <span className="text-green-600 font-medium">
+                                                Diskon Membership{" "}
+                                                {membershipDiscount.percentage}
+                                                %:
+                                              </span>
+                                              <span className="text-green-600 font-medium">
+                                                -
+                                                {formatCurrency(
+                                                  membershipDiscountAmount,
+                                                )}
+                                              </span>
+                                            </div>
+                                          )}
+                                          {userDiscountAmount > 0 && (
+                                            <div className="flex items-center justify-between text-sm">
+                                              <span className="text-green-600 font-medium">
+                                                Diskon{" "}
+                                                {formatCurrency(
+                                                  userDiscount.value,
+                                                )}{" "}
+                                                per penumpang ({jumlahPenumpang}{" "}
+                                                penumpang):
+                                              </span>
+                                              <span className="text-green-600 font-medium">
+                                                -
+                                                {formatCurrency(
+                                                  userDiscountAmount,
+                                                )}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </>
                                       )}
                                       <div className="flex items-center justify-between border-t pt-2">
                                         <span className="text-sm font-medium text-blue-800">
@@ -1903,18 +2617,14 @@ const BookingFormGroup = () => {
                                         <span
                                           className={`text-lg font-bold ${hasDiscount ? "text-green-900" : "text-blue-900"}`}
                                         >
-                                          {formatCurrency(
-                                            hasDiscount
-                                              ? discountedTotal
-                                              : totalWithBaggage,
-                                          )}
+                                          {formatCurrency(finalTotal)}
                                         </span>
                                       </div>
                                       {hasDiscount && (
                                         <div className="text-xs text-green-600 font-semibold text-center">
                                           Hemat{" "}
                                           {formatCurrency(
-                                            totalWithBaggage - discountedTotal,
+                                            totalWithBaggage - finalTotal,
                                           )}
                                           !
                                         </div>
@@ -1933,10 +2643,10 @@ const BookingFormGroup = () => {
                   <Separator />
 
                   {/* Discount Section - Only show if user has active discount */}
-                  {userDiscount.active && (
+                  {/*      {userDiscount.active && (
                     <div>
-                      <h3 className="text-base sm:text-lg font-semibold mb-4">
-                        Diskon Agent
+                        <h3 className="text-base sm:text-lg font-semibold mb-4">
+                        Diskon Agent2
                       </h3>
                       <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -1958,10 +2668,10 @@ const BookingFormGroup = () => {
                               penumpang
                             </div>
                           </div>
-                        </div>
+                        </div> */}
 
-                        {/* Current Discount Display */}
-                        {(() => {
+                  {/* Current Discount Display */}
+                  {/*         {(() => {
                           const basePrice = calculateTotalPrice();
                           const totalHarga =
                             basePrice * (form.watch("jumlah_penumpang") || 1);
@@ -2003,9 +2713,82 @@ const BookingFormGroup = () => {
                         })()}
                       </div>
                     </div>
-                  )}
+                  )} */}
 
                   {userDiscount.active && <Separator />}
+
+                  {/* Membership Discount Section - Only show if user has active membership discount */}
+                  {/*        {membershipDiscount.active &&
+                    membershipDiscount.percentage > 0 && (
+                      <div>
+                        <h3 className="text-base sm:text-lg font-semibold mb-4">
+                          Diskon Membership
+                        </h3>
+                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <Label className="text-sm font-medium mb-2 block">
+                                Jenis Diskon
+                              </Label>
+                              <div className="p-2 bg-white border rounded text-sm">
+                                Persentase (%)
+                              </div>
+                            </div>
+
+                            <div>
+                              <Label className="text-sm font-medium mb-2 block">
+                                Nilai Diskon
+                              </Label>
+                              <div className="p-2 bg-white border rounded text-sm">
+                                {membershipDiscount.percentage}% dari total
+                                harga
+                              </div>
+                            </div>
+                          </div> */}
+
+                  {/* Current Membership Discount Display */}
+                  {/*         {(() => {
+                            const basePrice = calculateTotalPrice();
+                            const jumlahPenumpang =
+                              form.watch("jumlah_penumpang") || 1;
+                            const additionalBaggage =
+                              form.watch("additional_baggage") || 0;
+                            const additionalBaggagePrice =
+                              calculateAdditionalBaggagePrice();
+                            const totalHarga =
+                              basePrice * jumlahPenumpang +
+                              additionalBaggagePrice;
+
+                            if (totalHarga > 0) {
+                              // Calculate membership discount amount
+                              const membershipDiscountAmount =
+                                (totalHarga * membershipDiscount.percentage) /
+                                100;
+
+                              return (
+                                <div className="text-sm space-y-2">
+                                  <div className="flex justify-between text-green-600 font-medium border-t pt-2">
+                                    <span>
+                                      Potongan Membership (
+                                      {membershipDiscount.percentage}% dari{" "}
+                                      {jumlahPenumpang} penumpang):
+                                    </span>
+                                    <span>
+                                      -
+                                      {formatCurrency(membershipDiscountAmount)}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                  {membershipDiscount.active &&
+                    membershipDiscount.percentage > 0 && <Separator />} */}
 
                   {/* Location Information */}
                   <div>
@@ -2027,16 +2810,30 @@ const BookingFormGroup = () => {
                               <Select
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
+                                disabled={
+                                  !selectedCity || locations.length === 0
+                                }
                               >
                                 <FormControl>
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Pilih lokasi penjemputan" />
+                                    <SelectValue
+                                      placeholder={
+                                        !selectedCity
+                                          ? "Pilih kota terlebih dahulu"
+                                          : locations.length === 0
+                                            ? "Tidak ada lokasi tersedia"
+                                            : "Pilih lokasi penjemputan"
+                                      }
+                                    />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {locationOptions.map((location) => (
-                                    <SelectItem key={location} value={location}>
-                                      {location}
+                                  {locations.map((location) => (
+                                    <SelectItem
+                                      key={location.id}
+                                      value={location.name}
+                                    >
+                                      {location.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -2061,16 +2858,30 @@ const BookingFormGroup = () => {
                               <Select
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
+                                disabled={
+                                  !selectedCity || locations.length === 0
+                                }
                               >
                                 <FormControl>
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Pilih lokasi pengantaran" />
+                                    <SelectValue
+                                      placeholder={
+                                        !selectedCity
+                                          ? "Pilih kota terlebih dahulu"
+                                          : locations.length === 0
+                                            ? "Tidak ada lokasi tersedia"
+                                            : "Pilih lokasi pengantaran"
+                                      }
+                                    />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {locationOptions.map((location) => (
-                                    <SelectItem key={location} value={location}>
-                                      {location}
+                                  {locations.map((location) => (
+                                    <SelectItem
+                                      key={location.id}
+                                      value={location.name}
+                                    >
+                                      {location.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -2193,7 +3004,7 @@ const BookingFormGroup = () => {
             Butuh bantuan? Hubungi tim support kami di support@handlingumroh.com
           </p>
           <p className="mt-2">
-            © {new Date().getFullYear()} Handling Umroh. All rights reserved.
+            © {new Date().getFullYear()} Handling Airport. All rights reserved.
           </p>
         </div>
       </div>

@@ -103,17 +103,42 @@ const SignInPage = () => {
           );
         }
 
-        // Check user account status
+        // Check user account status in both users and agent_users tables
         const { data: userStatusData, error: statusError } = await supabase
           .from("users")
           .select("status")
           .eq("id", authData.user.id)
           .single();
 
-        if (statusError) {
-          console.error("Error checking user status:", statusError);
-          // Continue with sign-in if we can't check status
-        } else if (userStatusData && userStatusData.status === "inactive") {
+        const { data: agentStatusData, error: agentStatusError } =
+          await supabase
+            .from("agent_users")
+            .select("status")
+            .eq("id", authData.user.id)
+            .single();
+
+        // Check if account is suspended in either table
+        const isUserSuspended =
+          userStatusData && userStatusData.status === "suspended";
+        const isAgentSuspended =
+          agentStatusData && agentStatusData.status === "suspended";
+        const isUserInactive =
+          userStatusData && userStatusData.status === "inactive";
+
+        if (statusError && agentStatusError) {
+          console.error(
+            "Error checking user status:",
+            statusError,
+            agentStatusError,
+          );
+          // Continue with sign-in if we can't check status in either table
+        } else if (isUserSuspended || isAgentSuspended) {
+          // Sign out the user immediately
+          await supabase.auth.signOut();
+          // Show suspended account dialog
+          setShowInactiveDialog(true);
+          return;
+        } else if (isUserInactive) {
           // Sign out the user immediately
           await supabase.auth.signOut();
           // Show inactive account dialog
@@ -250,7 +275,7 @@ const SignInPage = () => {
                 Akun Tidak Aktif
               </DialogTitle>
               <DialogDescription className="text-center pt-4">
-                Akun di Non Aktiv kan, Silahkan hubungi Team Travelintrips
+                Akun di Non Aktifkan, Silahkan hubungi team Travelintrips
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-center pt-4">

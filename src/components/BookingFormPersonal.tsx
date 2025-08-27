@@ -181,6 +181,77 @@ const BookingFormPersonal = () => {
     setSubmitError(null);
 
     try {
+      // Generate booking code and booking ID (UUID)
+      const generatedBookingCode = `HSA-PERSONAL-${Date.now()}`;
+      const bookingId = `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`.replace(
+        /[xy]/g,
+        function (c) {
+          const r = (Math.random() * 16) | 0;
+          const v = c == "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        },
+      );
+
+      // Determine payment status based on payment method
+      const paymentStatus =
+        selectedPaymentMethod === "cash" ||
+        selectedPaymentMethod === "use_saldo"
+          ? "Paid"
+          : "tunggu konfirmasi Admin";
+
+      // Determine booking status based on payment method
+      const bookingStatus =
+        selectedPaymentMethod === "use_saldo" ? "confirmed" : "pending";
+
+      // Get selected bank name if bank transfer is selected
+      const bankName = null; // No bank selection in personal form
+
+      // Prepare data for handling_bookings table
+      const bookingData = {
+        user_id: user?.id,
+        booking_id: bookingId,
+        customer_name: formData.nama_lengkap,
+        customer_email: formData.email,
+        customer_phone: formData.no_telepon,
+        category: "Handling Personal",
+        pickup_area: formData.area_penjemputan,
+        dropoff_area: formData.area_pengantaran,
+        flight_number: formData.nomor_penerbangan,
+        travel_type: formData.jenis_perjalanan.join(", "),
+        pickup_date: formData.tanggal_pickup,
+        pickup_time: formData.waktu_pickup,
+        passengers: 1, // Personal booking is for 1 passenger
+        additional_notes: formData.catatan_tambahan,
+        price: totalPrice, // Basic price
+        total_amount: totalPrice, // Total amount (no discounts for personal)
+        status: bookingStatus,
+        code_booking: generatedBookingCode,
+        created_at: new Date().toISOString(),
+        payment_id: null,
+        payment_method: selectedPaymentMethod,
+        company_name: formData.nama_perusahaan,
+        payment_status: paymentStatus,
+        passenger_area: formData.area_penjemputan,
+        total_price: totalPrice,
+        bank_name: bankName,
+        // Add discount information (null for personal bookings)
+        member_discount: null,
+        user_discount: null,
+      };
+
+      // Insert data into handling_bookings table
+      const { data: bookingResult, error: bookingError } = await supabase
+        .from("handling_bookings")
+        .insert([bookingData])
+        .select();
+
+      if (bookingError) {
+        console.error("Error inserting booking data:", bookingError);
+        throw new Error(`Database error: ${bookingError.message}`);
+      }
+
+      console.log("Booking data successfully inserted:", bookingResult);
+
       // If using saldo, deduct from user balance
       if (selectedPaymentMethod === "use_saldo") {
         const newSaldo = userSaldo - totalPrice;
@@ -194,15 +265,14 @@ const BookingFormPersonal = () => {
         }
 
         // Create transaction history record
-        const bookingCode = `HSA-PERSONAL-${Date.now()}`;
         const { error: historyError } = await supabase
           .from("histori_transaksi")
           .insert({
             user_id: user?.id,
-            kode_booking: bookingCode,
+            kode_booking: generatedBookingCode,
             nominal: -totalPrice,
             saldo_akhir: newSaldo,
-            keterangan: `Pembayaran booking personal ${bookingCode}`,
+            keterangan: `Pembayaran booking personal ${generatedBookingCode}`,
             trans_date: new Date().toISOString(),
           });
 
@@ -212,6 +282,41 @@ const BookingFormPersonal = () => {
 
         setUserSaldo(newSaldo);
       }
+
+      // Prepare data for payments table
+      const paymentsData = {
+        user_id: user?.id,
+        booking_id: bookingId,
+        payment_method: selectedPaymentMethod,
+        paid_amount: totalPrice,
+        code_booking: generatedBookingCode,
+        status:
+          selectedPaymentMethod === "cash" ||
+          selectedPaymentMethod === "use_saldo"
+            ? "auto paid"
+            : "pending",
+        amount: totalPrice,
+        payment_status:
+          selectedPaymentMethod === "cash" ||
+          selectedPaymentMethod === "use_saldo"
+            ? "completed"
+            : "pending",
+        created_at: new Date().toISOString(),
+        bank_name: bankName,
+      };
+
+      // Insert data into payments table
+      const { data: paymentsResult, error: paymentsError } = await supabase
+        .from("payments")
+        .insert([paymentsData])
+        .select();
+
+      if (paymentsError) {
+        console.error("Error inserting payments data:", paymentsError);
+        throw new Error(`Payments database error: ${paymentsError.message}`);
+      }
+
+      console.log("Payments data successfully inserted:", paymentsResult);
 
       console.log("Personal booking data:", formData);
       setSubmitSuccess(true);
