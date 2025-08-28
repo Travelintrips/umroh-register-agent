@@ -994,7 +994,7 @@ const BookingFormGroup = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Invoice - ${bookingCode}</title>
+        <title>Receipt - ${bookingCode}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
           .header { margin-bottom: 30px; border-bottom: 2px solid #16a34a; padding-bottom: 20px; position: relative; }
@@ -1041,7 +1041,7 @@ const BookingFormGroup = () => {
             line-height: 1.2;
           }
           
-          .invoice-title {
+          .receipt-title {
             font-size: 22px;
             font-weight: bold;
             color: #333;
@@ -1057,7 +1057,7 @@ const BookingFormGroup = () => {
             line-height: 1.2;
           }
           
-          .invoice-subtitle {
+          .receipt-subtitle {
             font-size: 12px;
             color: #666;
             margin-top: 5px;
@@ -1073,34 +1073,10 @@ const BookingFormGroup = () => {
               <div class="company-name">Travelintrips Handling Airport</div>
             </div>
             <div class="header-center">
-              <div class="invoice-title">INVOICE PESANAN GROUP</div>
+              <div class="receipt-title">RECEIPT HANDLING GROUP</div>
             </div>
             <div class="header-right">
-              <div class="booking-code">Invoice - ${bookingCode}</div>
-            </div>
-          </div>
-        </div>
-
-
-
-        <div class="section">
-          <div class="section-title">Informasi Pelanggan</div>
-          <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label">Nama Perusahaan:</div>
-              <div class="info-value">${formData.nama_perusahaan}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Nama Lengkap:</div>
-              <div class="info-value">${formData.nama_lengkap}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Email:</div>
-              <div class="info-value">${formData.email}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">No. Telepon:</div>
-              <div class="info-value">${formData.no_telepon}</div>
+              <div class="booking-code">Receipt - ${bookingCode}</div>
             </div>
           </div>
         </div>

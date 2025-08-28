@@ -612,7 +612,7 @@ const DashboardPage = () => {
     const invoiceContent = `
       <html>
         <head>
-          <title>Invoice - ${order.id}</title>
+          <title>Receipt - ${order.id}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
@@ -623,7 +623,7 @@ const DashboardPage = () => {
               background: white;
               padding: 20px;
             }
-            .invoice-container {
+            .receipt-container {
               max-width: 800px;
               margin: 0 auto;
               border: 2px solid #4CAF50;
@@ -647,14 +647,14 @@ const DashboardPage = () => {
               color: #4CAF50;
               margin-bottom: 5px;
             }
-            .invoice-title {
+            .receipt-title {
               text-align: center;
               flex: 1;
               font-size: 16px;
               font-weight: bold;
               color: #333;
             }
-            .invoice-number {
+            .receipt-number {
               text-align: right;
               flex: 1;
               font-size: 12px;
@@ -672,7 +672,7 @@ const DashboardPage = () => {
               font-weight: bold;
               color: #4CAF50;
               margin-bottom: 10px;
-              font-size: 13px;
+              Sont-size: 13px;
             }
             .info-grid {
               display: grid;
@@ -729,23 +729,23 @@ const DashboardPage = () => {
             }
             @media print {
               body { padding: 0; }
-              .invoice-container { border: 2px solid #4CAF50; }
+              .receipt-container { border: 2px solid #4CAF50; }
             }
           </style>
         </head>
         <body>
-          <div class="invoice-container">
+          <div class="receipt-container">
             <div class="date-time">${currentDate}, ${currentTime}</div>
             
             <div class="header">
               <div class="company-info">
                 <div class="company-name">Travelintrips Handling<br>Airport</div>
               </div>
-              <div class="invoice-title">
-                INVOICE PESANAN GROUP
+              <div class="receipt-title">
+                RECEIPT PESANAN GROUP
               </div>
-              <div class="invoice-number">
-                Invoice - ${order.id}
+              <div class="receipt-number">
+                Receipt - ${order.id}
               </div>
             </div>
 
@@ -1534,7 +1534,7 @@ const DashboardPage = () => {
                                             className="flex items-center gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300"
                                           >
                                             <Printer className="h-4 w-4" />
-                                            Print Invoice
+                                            Print Receipt
                                           </Button>
                                         </div>
 
@@ -1577,16 +1577,31 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          {originalBooking?.flight_number && (
-                                            <div>
-                                              <label className="text-sm font-medium text-gray-500">
-                                                Nomor Penerbangan
-                                              </label>
-                                              <p className="text-sm mt-1">
-                                                {originalBooking.flight_number}
-                                              </p>
+                                          <div className="grid grid-cols-3 gap-2">
+                                            {originalBooking?.flight_number && (
+                                              <div>
+                                                <label className="text-sm font-medium text-gray-500">
+                                                  Nomor Penerbangan
+                                                </label>
+                                                <p className="text-sm mt-1">
+                                                  {
+                                                    originalBooking.flight_number
+                                                  }
+                                                </p>
+                                              </div>
+                                            )}
+                                            <div className="grid grid-cols-3 gap-2">
+                                              <div>
+                                                <label className="text-sm font-medium text-gray-500">
+                                                  Bagasi Tambahan
+                                                </label>
+                                                <p className="text-sm mt-1">
+                                                  {order.participants * 2}{" "}
+                                                  bagasi
+                                                </p>
+                                              </div>
                                             </div>
-                                          )}
+                                          </div>
 
                                           <div className="grid grid-cols-3 gap-2">
                                             <div>
