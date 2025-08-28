@@ -672,7 +672,7 @@ const DashboardPage = () => {
               font-weight: bold;
               color: #4CAF50;
               margin-bottom: 10px;
-              Sont-size: 13px;
+              font-size: 13px;
             }
             .info-grid {
               display: grid;
@@ -780,7 +780,18 @@ const DashboardPage = () => {
                 </div>
                 <div class="info-item">
                   <div class="info-label">Jumlah Bagasi:</div>
-                  <div class="info-value">${order.participants * 2} bagasi</div>
+                  <div class="info-value">${(() => {
+                    // Get the actual additional baggage from booking data
+                    if (originalBooking?.bagasi_tambahan) {
+                      // Parse the bagasi_tambahan field (format: "quantity x price")
+                      const baggageMatch =
+                        originalBooking.bagasi_tambahan.match(/^(\d+)/);
+                      if (baggageMatch) {
+                        return `${baggageMatch[1]} bagasi`;
+                      }
+                    }
+                    return "0 bagasi";
+                  })()}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Nomor Penerbangan:</div>
@@ -1439,7 +1450,6 @@ const DashboardPage = () => {
                           <TableHead>Passenger</TableHead>
                           <TableHead>Payment Method</TableHead>
                           <TableHead>Payment Status</TableHead>
-                          {/*      <TableHead>Basic Price1</TableHead> */}
                           <TableHead>Total</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
@@ -1454,9 +1464,6 @@ const DashboardPage = () => {
                                 order.id,
                             );
 
-                            {
-                              /*     const basicPrice = originalBooking?.price || 0; */
-                            }
                             const isExpanded = expandedOrderId === order.id;
 
                             const rows = [
@@ -1503,9 +1510,6 @@ const DashboardPage = () => {
                                         : "Belum Bayar"}
                                   </Badge>
                                 </TableCell>
-                                {/* <TableCell>
-                                  {formatCurrency(basicPrice)}
-                                </TableCell>*/}
                                 <TableCell>
                                   {formatCurrency(order.total_amount)}
                                 </TableCell>
@@ -1596,8 +1600,22 @@ const DashboardPage = () => {
                                                   Bagasi Tambahan
                                                 </label>
                                                 <p className="text-sm mt-1">
-                                                  {order.participants * 2}{" "}
-                                                  bagasi
+                                                  {(() => {
+                                                    // Get the actual additional baggage from booking data
+                                                    if (
+                                                      originalBooking?.bagasi_tambahan
+                                                    ) {
+                                                      // Parse the bagasi_tambahan field (format: "quantity x price")
+                                                      const baggageMatch =
+                                                        originalBooking.bagasi_tambahan.match(
+                                                          /^(\d+)/,
+                                                        );
+                                                      if (baggageMatch) {
+                                                        return `${baggageMatch[1]} bagasi`;
+                                                      }
+                                                    }
+                                                    return "0 bagasi";
+                                                  })()}
                                                 </p>
                                               </div>
                                             </div>
