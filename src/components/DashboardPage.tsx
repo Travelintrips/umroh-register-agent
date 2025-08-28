@@ -798,9 +798,10 @@ const DashboardPage = () => {
                   <div class="info-value">${originalBooking?.flight_number || "QG"}</div>
                 </div>
                 <div class="info-item">
-                  <div class="info-label">Jenis Perjalanan:</div>
-                  <div class="info-value">Transit</div>
-                </div>
+  <div class="info-label">Jenis Perjalanan:</div>
+  <div class="info-value">${originalBooking.travel_type}</div>
+</div>
+
                 <div class="info-item">
                   <div class="info-label">Area Penjemputan:</div>
                   <div class="info-value">${originalBooking?.pickup_area || "Terminal 1C - Domestic Arrival"}</div>
@@ -821,50 +822,120 @@ const DashboardPage = () => {
               <div class="payment-section">
                 <div class="payment-row">
                   <span class="payment-label">Metode Pembayaran:</span>
-                  <span class="payment-value">Gunakan Saldo</span>
+                  <span class="payment-value">Saldo</span>
                 </div>
                 <div class="payment-row">
-                  <span class="payment-label">Transit</span>
-                  <span class="payment-value">${formatCurrency(basicPrice)}</span>
+                  <span class="payment-label">Jenis Layanan:</span>
+                  <span class="payment-value">${originalBooking.travel_type}</span>
                 </div>
                 <div class="payment-row">
-                  <span class="payment-label">Subtotal per penumpang:</span>
-                  <span class="payment-value">${formatCurrency(basicPrice)}</span>
-                </div>
-                <div class="payment-row">
-                  <span class="payment-label">Jumlah penumpang:</span>
+                  <span class="payment-label">Jumlah Penumpang:</span>
                   <span class="payment-value">${order.participants} orang</span>
                 </div>
-                <div class="payment-row">
-                  <span class="payment-label">2 bagasi tambahan:</span>
-                  <span class="payment-value">${formatCurrency(originalTotalAmount - basicPrice * passengers)}</span>
+                
+                <div class="payment-row" style="margin-top: 15px; font-weight: bold;">
+                  <span class="payment-label">Harga Dasar:</span>
+                  <span class="payment-value"></span>
                 </div>
-                <div class="payment-row">
-                  <span class="payment-label">Subtotal:</span>
+                <div class="payment-row" style="padding-left: 10px;">
+                  <span class="payment-label">- ${originalBooking.travel_type}:</span>
+                  <span class="payment-value">${(() => {
+                    // Calculate base price based on travel type logic
+                    const travelType =
+                      originalBooking.travel_type?.toLowerCase() || "";
+                    let basePrice = 0;
+
+                    if (
+                      travelType.includes("arrival") &&
+                      travelType.includes("departure")
+                    ) {
+                      basePrice = 40000; // Arrival + Departure
+                    } else if (travelType.includes("arrival")) {
+                      basePrice = 25000; // Only Arrival
+                    } else if (travelType.includes("departure")) {
+                      basePrice = 25000; // Only Departure
+                    } else if (travelType.includes("transit")) {
+                      basePrice = 50000; // Transit
+                    } else {
+                      // Fallback to original price if pattern doesn't match
+                      basePrice = basicPrice;
+                    }
+
+                    return formatCurrency(basePrice * passengers);
+                  })()}</span>
+                </div>
+                
+                ${(() => {
+                  // Check if there's additional baggage
+                  if (originalBooking?.bagasi_tambahan) {
+                    const baggageMatch =
+                      originalBooking.bagasi_tambahan.match(
+                        /^(\d+)\s*x\s*(\d+)/,
+                      );
+                    if (baggageMatch) {
+                      const quantity = parseInt(baggageMatch[1]);
+                      const pricePerBaggage = parseInt(baggageMatch[2]);
+                      const totalBaggagePrice = quantity * pricePerBaggage;
+
+                      if (quantity > 0) {
+                        return `
+                <div class="payment-row" style="margin-top: 15px; font-weight: bold;">
+                  <span class="payment-label">Tambahan:</span>
+                  <span class="payment-value"></span>
+                </div>
+                <div class="payment-row" style="padding-left: 10px;">
+                  <span class="payment-label">- ${quantity} Bagasi Tambahan:</span>
+                  <span class="payment-value">${formatCurrency(totalBaggagePrice)}</span>
+                </div>`;
+                      }
+                    }
+                  }
+                  return "";
+                })()}
+                
+                <div class="payment-row" style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                  <span class="payment-label">Subtotal (harga asli):</span>
                   <span class="payment-value">${formatCurrency(originalTotalAmount)}</span>
                 </div>
-                ${
-                  userDiscountAmount > 0
-                    ? `
-                <div class="payment-row discount-row">
-                  <span class="payment-label">Diskon Rp ${formatCurrency(userDiscount).replace("Rp ", "")} per penumpang (${order.participants} penumpang):</span>
-                  <span class="payment-value">-${formatCurrency(userDiscountAmount)}</span>
-                </div>`
-                    : ""
-                }
-                ${
-                  memberDiscountAmount > 0
-                    ? `
+                
+                ${(() => {
+                  let discountSection = "";
+
+                  if (memberDiscountAmount > 0) {
+                    discountSection += `
                 <div class="payment-row discount-row">
                   <span class="payment-label">Diskon Membership ${memberDiscount}%:</span>
                   <span class="payment-value">-${formatCurrency(memberDiscountAmount)}</span>
-                </div>`
-                    : ""
-                }
-                <div class="payment-row total-row">
+                </div>`;
+                  }
+
+                  if (userDiscountAmount > 0) {
+                    discountSection += `
+                <div class="payment-row discount-row">
+                  <span class="payment-label">Diskon Rp ${formatCurrency(userDiscount).replace("Rp ", "")} per penumpang (${passengers} orang):</span>
+                  <span class="payment-value">-${formatCurrency(userDiscountAmount)}</span>
+                </div>`;
+                  }
+
+                  return discountSection;
+                })()}
+                
+                <div class="payment-row total-row" style="border-top: 2px solid #333; margin-top: 10px; padding-top: 10px;">
                   <span class="payment-label">Total Pembayaran:</span>
                   <span class="payment-value">${formatCurrency(totalAmount)}</span>
                 </div>
+                
+                ${(() => {
+                  const totalSavings = originalTotalAmount - totalAmount;
+                  if (totalSavings > 0) {
+                    return `
+                <div class="payment-row" style="text-align: center; color: #4CAF50; font-weight: bold; margin-top: 5px;">
+                  <span class="payment-label" style="width: 100%; text-align: center;">(Hemat ${formatCurrency(totalSavings)})</span>
+                  <span class="payment-value"></span>
+                </div>`;
+                  }
+                  return "";
+                })()}
               </div>
             </div>
 
@@ -1543,7 +1614,7 @@ const DashboardPage = () => {
                                         </div>
 
                                         <div className="space-y-3">
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             <div>
                                               <label className="text-sm font-medium text-gray-500">
                                                 ID Pesanan
@@ -1562,7 +1633,7 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             <div>
                                               <label className="text-sm font-medium text-gray-500">
                                                 Nama Customer
@@ -1581,7 +1652,7 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             {originalBooking?.flight_number && (
                                               <div>
                                                 <label className="text-sm font-medium text-gray-500">
@@ -1594,7 +1665,7 @@ const DashboardPage = () => {
                                                 </p>
                                               </div>
                                             )}
-                                            <div className="grid grid-cols-3 gap-2">
+                                            <div className="grid grid-cols-2 gap-2">
                                               <div>
                                                 <label className="text-sm font-medium text-gray-500">
                                                   Bagasi Tambahan
@@ -1621,7 +1692,7 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             <div>
                                               <label className="text-sm font-medium text-gray-500">
                                                 Tanggal Pick Up
@@ -1642,7 +1713,7 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             <div>
                                               <label className="text-sm font-medium text-gray-500">
                                                 Area Lokasi Penjemputan
@@ -1663,7 +1734,7 @@ const DashboardPage = () => {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-3 gap-2">
+                                          <div className="grid grid-cols-2 gap-2">
                                             <div>
                                               <label className="text-sm font-medium text-gray-500">
                                                 Passenger
