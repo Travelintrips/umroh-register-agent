@@ -2339,6 +2339,7 @@ const DashboardPage = () => {
                               note: requestNote || null,
                               reference_no: referenceNo,
                               proof_url: proofUrl,
+                              request_by_role: userRole,
                             })
                             .select()
                             .single();
