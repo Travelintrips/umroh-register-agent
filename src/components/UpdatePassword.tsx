@@ -58,40 +58,71 @@ const UpdatePassword = () => {
 
   useEffect(() => {
     const validateToken = async () => {
-      // Ambil token dari query params atau hash
-      const search = window.location.search; // ?access_token=...
-      const hash = window.location.hash; // #access_token=...
-      const params = new URLSearchParams(search || hash.replace(/^#/, ""));
-
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
-
-      if (!accessToken || !refreshToken) {
-        setTokenValid(false);
-        setError(
-          "Invalid or missing reset token. Please request a new password reset.",
-        );
-        return;
-      }
-
       try {
+        // Get tokens from URL hash or search params
+        const search = window.location.search; // ?access_token=...
+        const hash = window.location.hash; // #access_token=...
+
+        // Try hash first, then search params
+        let params = new URLSearchParams(hash.replace(/^#/, ""));
+        if (!params.get("access_token") && search) {
+          params = new URLSearchParams(search.replace(/^\?/, ""));
+        }
+
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        const tokenType = params.get("type");
+
+        console.log("Token validation:", {
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken,
+          tokenType,
+          url: window.location.href,
+        });
+
+        if (!accessToken || !refreshToken) {
+          setTokenValid(false);
+          setError(
+            "Invalid or missing reset token. Please request a new password reset from the forgot password page.",
+          );
+          return;
+        }
+
+        // Validate that this is a recovery token
+        if (tokenType !== "recovery") {
+          setTokenValid(false);
+          setError(
+            "Invalid token type. This link is not for password recovery.",
+          );
+          return;
+        }
+
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
 
         if (error) {
+          console.error("Session error:", error);
           setTokenValid(false);
           setError(
-            "Invalid or expired reset token. Please request a new password reset.",
+            `Invalid or expired reset token: ${error.message}. Please request a new password reset.`,
           );
         } else if (data.session) {
+          console.log("Session established successfully");
           setTokenValid(true);
+        } else {
+          setTokenValid(false);
+          setError(
+            "Unable to establish session. Please request a new password reset.",
+          );
         }
       } catch (err) {
         console.error("Error validating token:", err);
         setTokenValid(false);
-        setError("An error occurred while validating the reset token.");
+        setError(
+          `An error occurred while validating the reset token: ${err instanceof Error ? err.message : "Unknown error"}`,
+        );
       }
     };
 
@@ -210,8 +241,14 @@ const UpdatePassword = () => {
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        The reset link is invalid or has expired. Please request
-                        a new password reset.
+                        The reset link is invalid or has expired. Please{" "}
+                        <button
+                          onClick={() => navigate("/forgot-password")}
+                          className="underline font-medium hover:no-underline"
+                        >
+                          request a new password reset
+                        </button>
+                        .
                       </AlertDescription>
                     </Alert>
                   )}
