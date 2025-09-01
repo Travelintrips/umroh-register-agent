@@ -260,6 +260,14 @@ const SignInPage = () => {
               </Link>
             </div>
             <div className="text-sm text-center">
+              <Link
+                to="/forgot-password"
+                className="text-green-600 hover:text-green-700 font-medium"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+            <div className="text-sm text-center">
               <Link to="/" className="text-gray-500 hover:text-gray-700">
                 ← Back to Home
               </Link>
