@@ -336,6 +336,116 @@ const DashboardPage = () => {
     }
   };
 
+  // Helper function to get the latest balance from histori_transaksi
+  const getLatestBalance = async (userId: string): Promise<number> => {
+    try {
+      const { data, error } = await supabase
+        .from("histori_transaksi")
+        .select("saldo_akhir")
+        .eq("user_id", userId)
+        .order("trans_date", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        // PGRST116 = no rows returned
+        console.error("Error fetching latest balance:", error);
+        return 0;
+      }
+
+      return data?.saldo_akhir || 0;
+    } catch (error) {
+      console.error("Error in getLatestBalance:", error);
+      return 0;
+    }
+  };
+
+  // Helper function to calculate saldo_akhir based on transaction type
+  const calculateSaldoAkhir = (
+    saldoAwal: number,
+    nominal: number,
+    jenisTransaksi: string,
+  ): number => {
+    // Check if this is a top-up request (not an actual balance change)
+    const isTopUpRequest = jenisTransaksi === "Topup Agent Request";
+
+    if (isTopUpRequest) {
+      // For top-up requests: saldo doesn't change until approved
+      return saldoAwal;
+    }
+
+    const isActualTopUp =
+      nominal > 0 &&
+      jenisTransaksi &&
+      jenisTransaksi.toLowerCase().includes("topup") &&
+      jenisTransaksi !== "Topup Agent Request";
+
+    if (isActualTopUp) {
+      // For actual approved top-up transactions: saldo_akhir = saldo_awal + nominal
+      return saldoAwal + Math.abs(nominal);
+    } else {
+      // For debit/payment transactions: saldo_akhir = saldo_awal - nominal
+      return saldoAwal - Math.abs(nominal);
+    }
+  };
+
+  // Helper function to insert transaction with correct saldo_akhir calculation
+  const insertTransactionWithCorrectBalance = async (
+    userId: string,
+    kodeBooking: string,
+    nominal: number,
+    keterangan: string,
+    jenisTransaksi: string,
+    status?: string,
+  ) => {
+    try {
+      // Get the latest balance (saldo_awal)
+      const saldoAwal = await getLatestBalance(userId);
+
+      // Calculate the correct saldo_akhir
+      const saldoAkhir = calculateSaldoAkhir(
+        saldoAwal,
+        nominal,
+        jenisTransaksi,
+      );
+
+      // Insert the transaction record with correct saldo_akhir
+      const { error } = await supabase.from("histori_transaksi").insert({
+        user_id: userId,
+        kode_booking: kodeBooking,
+        nominal: nominal,
+        keterangan: keterangan,
+        jenis_transaksi: jenisTransaksi,
+        trans_date: new Date().toISOString(),
+        saldo_akhir: saldoAkhir,
+        status: status || null,
+      });
+
+      if (error) {
+        console.error("Error inserting transaction:", error);
+        throw error;
+      }
+
+      // Only update user's saldo in the users table if it's not a top-up request
+      if (jenisTransaksi !== "Topup Agent Request") {
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({ saldo: saldoAkhir })
+          .eq("id", userId);
+
+        if (updateError) {
+          console.error("Error updating user saldo:", updateError);
+          throw updateError;
+        }
+      }
+
+      return saldoAkhir;
+    } catch (error) {
+      console.error("Error in insertTransactionWithCorrectBalance:", error);
+      throw error;
+    }
+  };
+
   const fetchTransactionHistory = async (userId: string) => {
     try {
       setLoadingTransactionHistory(true);
@@ -1026,15 +1136,45 @@ const DashboardPage = () => {
 
   //menambahkan category di keterangan
   const buildTxnDescription = (transaction: any, handlingBookings: any[]) => {
-    // Cari booking terkait
-    const relatedBooking = handlingBookings.find(
-      (b) => b.code_booking === transaction.kode_booking,
-    );
+    const kodeBooking = transaction.kode_booking || "";
 
-    // Ambil category, kalau kosong kasih default
-    const category = relatedBooking?.category || "Handling Group";
+    // Check if this is a top-up request (starts with "TOP-AR-" or "TOP-")
+    if (
+      kodeBooking.startsWith("TOP-AR-") ||
+      (kodeBooking.startsWith("TOP-") &&
+        transaction.jenis_transaksi === "Topup Agent Request")
+    ) {
+      return `Request top up saldo - ${kodeBooking}`;
+    }
 
-    return `Pembayaran booking ${transaction.kode_booking || "N/A"} - ${category}`;
+    // Check if this is a regular top-up (positive nominal)
+    if (
+      transaction.nominal > 0 &&
+      transaction.jenis_transaksi &&
+      transaction.jenis_transaksi.toLowerCase().includes("topup")
+    ) {
+      return `Top up saldo - ${kodeBooking || "N/A"}`;
+    }
+
+    // For booking payments (negative nominal or regular bookings)
+    if (kodeBooking && !kodeBooking.startsWith("TOP")) {
+      // Cari booking terkait
+      const relatedBooking = handlingBookings.find(
+        (b) => b.code_booking === kodeBooking,
+      );
+
+      // Ambil category, kalau kosong kasih default
+      const category = relatedBooking?.category || "Handling Group";
+
+      return `Pembayaran booking ${kodeBooking} - ${category}`;
+    }
+
+    // Fallback for other transactions
+    if (transaction.nominal > 0) {
+      return "Top up saldo";
+    } else {
+      return "Pembayaran";
+    }
   };
 
   return (
@@ -2356,19 +2496,17 @@ const DashboardPage = () => {
                             return;
                           }
 
-                          // Add entry to histori_transaksi table
-                          const { error: historyError } = await supabase
-                            .from("histori_transaksi")
-                            .insert({
-                              user_id: user.id,
-                              nominal: parseInt(topUpAmount),
-                              keterangan: `Request top up saldo - ${referenceNo}`,
-                              jenis_transaksi: "Topup Agent Request",
-                              trans_date: new Date().toISOString(),
-                              saldo_akhir: saldo, // Current balance before top-up
-                            });
-
-                          if (historyError) {
+                          // Add entry to histori_transaksi table with correct saldo calculation
+                          try {
+                            await insertTransactionWithCorrectBalance(
+                              user.id,
+                              referenceNo,
+                              parseInt(topUpAmount),
+                              `Request top up saldo - ${referenceNo}`,
+                              "Topup Agent Request",
+                              "pending",
+                            );
+                          } catch (historyError) {
                             console.error(
                               "Error creating transaction history:",
                               historyError,
@@ -2426,6 +2564,7 @@ const DashboardPage = () => {
                           <TableHead>Deskripsi</TableHead>
                           <TableHead>Saldo Awal</TableHead>
                           <TableHead>Jumlah Dipotong</TableHead>
+                          <TableHead>Nominal Topup</TableHead>
                           <TableHead>Saldo Setelah</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
@@ -2433,50 +2572,102 @@ const DashboardPage = () => {
                       <TableBody>
                         {loadingTransactionHistory ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-8">
+                            <TableCell colSpan={8} className="text-center py-8">
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
                               Loading...
                             </TableCell>
                           </TableRow>
                         ) : transactionHistory.length > 0 ? (
-                          transactionHistory.map((transaction) => (
-                            <TableRow key={transaction.id}>
-                              <TableCell>
-                                {transaction.trans_date
-                                  ? formatDate(transaction.trans_date)
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {transaction.kode_booking || "N/A"}
-                              </TableCell>
-                              <TableCell>
-                                {buildTxnDescription(
-                                  transaction,
-                                  handlingBookings,
-                                )}
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  transaction.nominal > 0
-                                    ? "text-green-600 font-medium"
-                                    : "text-red-600 font-medium"
-                                }
-                              >
-                                {transaction.nominal > 0 ? "+" : ""}
-                                {formatCurrency(transaction.nominal)}
-                              </TableCell>
-                              <TableCell>
-                                {formatCurrency(transaction.saldo_akhir)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="default">Berhasil</Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                          transactionHistory.map((transaction) => {
+                            const isTopUp =
+                              transaction.nominal > 0 ||
+                              (transaction.jenis_transaksi &&
+                                transaction.jenis_transaksi
+                                  .toLowerCase()
+                                  .includes("topup"));
+
+                            const isTopUpRequest =
+                              transaction.kode_booking &&
+                              (transaction.kode_booking.startsWith("TOP-AR-") ||
+                                (transaction.kode_booking.startsWith("TOP-") &&
+                                  transaction.jenis_transaksi ===
+                                    "Topup Agent Request"));
+
+                            // Use the saldo_akhir from database as it's now calculated correctly
+                            const saldoAkhir = transaction.saldo_akhir;
+
+                            // Calculate saldo_awal based on the transaction type and saldo_akhir
+                            let saldoAwal;
+                            if (isTopUp && transaction.nominal > 0) {
+                              // For actual top-up: saldo_awal = saldo_akhir - nominal
+                              saldoAwal = saldoAkhir - transaction.nominal;
+                            } else if (isTopUpRequest) {
+                              // For top-up requests: saldo_awal = saldo_akhir (no balance change)
+                              saldoAwal = saldoAkhir;
+                            } else {
+                              // For deductions: saldo_awal = saldo_akhir + |nominal|
+                              saldoAwal =
+                                saldoAkhir + Math.abs(transaction.nominal);
+                            }
+
+                            return (
+                              <TableRow key={transaction.id}>
+                                <TableCell>
+                                  {transaction.trans_date
+                                    ? formatDate(transaction.trans_date)
+                                    : "N/A"}
+                                </TableCell>
+                                <TableCell className="font-mono">
+                                  {transaction.kode_booking || "N/A"}
+                                </TableCell>
+                                <TableCell>
+                                  {buildTxnDescription(
+                                    transaction,
+                                    handlingBookings,
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(saldoAwal)}
+                                </TableCell>
+                                <TableCell className="text-red-600 font-medium">
+                                  {!isTopUp && !isTopUpRequest
+                                    ? formatCurrency(
+                                        Math.abs(transaction.nominal),
+                                      )
+                                    : "-"}
+                                </TableCell>
+                                <TableCell className="text-green-600 font-medium">
+                                  {(isTopUp && transaction.nominal > 0) ||
+                                  isTopUpRequest
+                                    ? "+" +
+                                      formatCurrency(
+                                        Math.abs(transaction.nominal),
+                                      )
+                                    : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(saldoAkhir)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      isTopUp || isTopUpRequest
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {isTopUp || isTopUpRequest
+                                      ? "Verified"
+                                      : "Berhasil"}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={5}
+                              colSpan={8}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada riwayat transaksi
@@ -2508,10 +2699,11 @@ const DashboardPage = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Tanggal</TableHead>
-                          <TableHead>ID Booking</TableHead>
+                          <TableHead>ID Booking/Transactions</TableHead>
                           <TableHead>Deskripsi</TableHead>
                           <TableHead>Saldo Awal</TableHead>
                           <TableHead>Jumlah Dipotong</TableHead>
+                          <TableHead>Penambahan Saldo/Topup</TableHead>
                           <TableHead>Saldo Setelah</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
@@ -2519,17 +2711,43 @@ const DashboardPage = () => {
                       <TableBody>
                         {loadingTransactionHistory ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-8">
+                            <TableCell colSpan={8} className="text-center py-8">
                               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto mb-2"></div>
                               Loading...
                             </TableCell>
                           </TableRow>
                         ) : transactionHistory.length > 0 ? (
                           transactionHistory.map((transaction) => {
-                            // Calculate initial balance (saldo awal) by adding back the deducted amount
-                            const saldoAwal =
-                              transaction.saldo_akhir +
-                              Math.abs(transaction.nominal);
+                            const isTopUp =
+                              transaction.nominal > 0 ||
+                              (transaction.jenis_transaksi &&
+                                transaction.jenis_transaksi
+                                  .toLowerCase()
+                                  .includes("topup"));
+
+                            const isTopUpRequest =
+                              transaction.kode_booking &&
+                              (transaction.kode_booking.startsWith("TOP-AR-") ||
+                                (transaction.kode_booking.startsWith("TOP-") &&
+                                  transaction.jenis_transaksi ===
+                                    "Topup Agent Request"));
+
+                            // Use the saldo_akhir from database as it's now calculated correctly
+                            const saldoAkhir = transaction.saldo_akhir;
+
+                            // Calculate saldo_awal based on the transaction type and saldo_akhir
+                            let saldoAwal;
+                            if (isTopUp && transaction.nominal > 0) {
+                              // For actual top-up: saldo_awal = saldo_akhir - nominal
+                              saldoAwal = saldoAkhir - transaction.nominal;
+                            } else if (isTopUpRequest) {
+                              // For top-up requests: saldo_awal = saldo_akhir (no balance change)
+                              saldoAwal = saldoAkhir;
+                            } else {
+                              // For deductions: saldo_awal = saldo_akhir + |nominal|
+                              saldoAwal =
+                                saldoAkhir + Math.abs(transaction.nominal);
+                            }
 
                             return (
                               <TableRow key={transaction.id}>
@@ -2551,15 +2769,36 @@ const DashboardPage = () => {
                                   {formatCurrency(saldoAwal)}
                                 </TableCell>
                                 <TableCell className="text-red-600 font-medium">
-                                  {formatCurrency(
-                                    Math.abs(transaction.nominal),
-                                  )}
+                                  {!isTopUp && !isTopUpRequest
+                                    ? formatCurrency(
+                                        Math.abs(transaction.nominal),
+                                      )
+                                    : "-"}
+                                </TableCell>
+                                <TableCell className="text-green-600 font-medium">
+                                  {(isTopUp && transaction.nominal > 0) ||
+                                  isTopUpRequest
+                                    ? "+" +
+                                      formatCurrency(
+                                        Math.abs(transaction.nominal),
+                                      )
+                                    : "-"}
                                 </TableCell>
                                 <TableCell>
-                                  {formatCurrency(transaction.saldo_akhir)}
+                                  {formatCurrency(saldoAkhir)}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant="default">Berhasil</Badge>
+                                  <Badge
+                                    variant={
+                                      isTopUp || isTopUpRequest
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {isTopUp || isTopUpRequest
+                                      ? "Verified"
+                                      : "Berhasil"}
+                                  </Badge>
                                 </TableCell>
                               </TableRow>
                             );
@@ -2567,7 +2806,7 @@ const DashboardPage = () => {
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={7}
+                              colSpan={8}
                               className="text-center py-8 text-gray-500"
                             >
                               Belum ada riwayat transaksi
