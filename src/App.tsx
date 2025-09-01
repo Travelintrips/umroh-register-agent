@@ -4,6 +4,7 @@ import UmrohHomePage from "./components/UmrohHomePage";
 import AgentRegistrationForm from "./components/AgentRegistrationForm";
 import SignInPage from "./components/SignInPage";
 import ForgotPassword from "./components/ForgotPassword";
+import UpdatePassword from "./components/UpdatePassword";
 import BookingForm from "./components/BookingForm";
 import BookingSelection from "./components/BookingSelection";
 import BookingFormPersonal from "./components/BookingFormPersonal";
@@ -21,6 +22,7 @@ function App() {
           <Route path="/register" element={<AgentRegistrationForm />} />
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/topup-details" element={<TopUpDetails />} />
           <Route
