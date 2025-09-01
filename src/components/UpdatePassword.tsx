@@ -57,9 +57,13 @@ const UpdatePassword = () => {
   });
 
   useEffect(() => {
-    // Check if we have the necessary tokens in the URL
-    const accessToken = searchParams.get("access_token");
-    const refreshToken = searchParams.get("refresh_token");
+    // Ambil token dari query params atau hash
+    const search = window.location.search; // ?access_token=...
+    const hash = window.location.hash; // #access_token=...
+    const params = new URLSearchParams(search || hash.replace(/^#/, ""));
+
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
 
     if (!accessToken || !refreshToken) {
       setTokenValid(false);
@@ -69,7 +73,6 @@ const UpdatePassword = () => {
       return;
     }
 
-    // Set the session with the tokens from URL
     const setSession = async () => {
       try {
         const { data, error } = await supabase.auth.setSession({
@@ -86,13 +89,14 @@ const UpdatePassword = () => {
           setTokenValid(true);
         }
       } catch (err) {
+        console.error("Error validating token:", err);
         setTokenValid(false);
         setError("An error occurred while validating the reset token.");
       }
     };
 
     setSession();
-  }, [searchParams]);
+  }, []); // Hapus dependency searchParams, pakai window.location langsung
 
   const onSubmit = async (data: UpdatePasswordFormValues) => {
     if (!tokenValid) {
