@@ -57,23 +57,23 @@ const UpdatePassword = () => {
   });
 
   useEffect(() => {
-    // Ambil token dari query params atau hash
-    const search = window.location.search; // ?access_token=...
-    const hash = window.location.hash; // #access_token=...
-    const params = new URLSearchParams(search || hash.replace(/^#/, ""));
+    const validateToken = async () => {
+      // Ambil token dari query params atau hash
+      const search = window.location.search; // ?access_token=...
+      const hash = window.location.hash; // #access_token=...
+      const params = new URLSearchParams(search || hash.replace(/^#/, ""));
 
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
 
-    if (!accessToken || !refreshToken) {
-      setTokenValid(false);
-      setError(
-        "Invalid or missing reset token. Please request a new password reset.",
-      );
-      return;
-    }
+      if (!accessToken || !refreshToken) {
+        setTokenValid(false);
+        setError(
+          "Invalid or missing reset token. Please request a new password reset.",
+        );
+        return;
+      }
 
-    const setSession = async () => {
       try {
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
@@ -95,8 +95,8 @@ const UpdatePassword = () => {
       }
     };
 
-    setSession();
-  }, []); // Hapus dependency searchParams, pakai window.location langsung
+    validateToken();
+  }, []);
 
   const onSubmit = async (data: UpdatePasswordFormValues) => {
     if (!tokenValid) {
