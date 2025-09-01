@@ -2356,6 +2356,26 @@ const DashboardPage = () => {
                             return;
                           }
 
+                          // Add entry to histori_transaksi table
+                          const { error: historyError } = await supabase
+                            .from("histori_transaksi")
+                            .insert({
+                              user_id: user.id,
+                              nominal: parseInt(topUpAmount),
+                              keterangan: `Request top up saldo - ${referenceNo}`,
+                              jenis_transaksi: "Topup Agent Request",
+                              trans_date: new Date().toISOString(),
+                              saldo_akhir: saldo, // Current balance before top-up
+                            });
+
+                          if (historyError) {
+                            console.error(
+                              "Error creating transaction history:",
+                              historyError,
+                            );
+                            // Don't block the process, just log the error
+                          }
+
                           // Reset form (keep sender name as it's auto-populated)
                           setTopUpAmount("");
                           setSelectedPaymentMethod("");
