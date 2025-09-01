@@ -2288,7 +2288,7 @@ const DashboardPage = () => {
                           const random = Math.floor(Math.random() * 10000)
                             .toString()
                             .padStart(4, "0");
-                          const referenceNo = `TP-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`;
+                          const referenceNo = `TOP-AR-${year}${month}${day}-${hours}${minutes}${seconds}-${random}`;
 
                           // Upload transfer proof file to Supabase storage
                           let proofUrl = "";
