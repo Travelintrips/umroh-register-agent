@@ -22,7 +22,14 @@ import {
 } from "./ui/form";
 import { Alert, AlertDescription } from "./ui/alert";
 import { supabase } from "../lib/supabase";
-import { AlertCircle, Loader2, CheckCircle, MapPin } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  CheckCircle,
+  MapPin,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 
 const updatePasswordSchema = z
   .object({
@@ -45,6 +52,8 @@ const UpdatePassword = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [tokenValid, setTokenValid] = useState<boolean | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -260,12 +269,26 @@ const UpdatePassword = () => {
                       <FormItem>
                         <FormLabel>New Password</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Enter your new password"
-                            type="password"
-                            disabled={!tokenValid || isSubmitting}
-                            {...field}
-                          />
+                          <div className="relative">
+                            <Input
+                              placeholder="Enter your new password"
+                              type={showPassword ? "text" : "password"}
+                              disabled={!tokenValid || isSubmitting}
+                              {...field}
+                            />
+                            <button
+                              type="button"
+                              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                              onClick={() => setShowPassword(!showPassword)}
+                              disabled={!tokenValid || isSubmitting}
+                            >
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                              )}
+                            </button>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -279,12 +302,28 @@ const UpdatePassword = () => {
                       <FormItem>
                         <FormLabel>Confirm New Password</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Confirm your new password"
-                            type="password"
-                            disabled={!tokenValid || isSubmitting}
-                            {...field}
-                          />
+                          <div className="relative">
+                            <Input
+                              placeholder="Confirm your new password"
+                              type={showConfirmPassword ? "text" : "password"}
+                              disabled={!tokenValid || isSubmitting}
+                              {...field}
+                            />
+                            <button
+                              type="button"
+                              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                              onClick={() =>
+                                setShowConfirmPassword(!showConfirmPassword)
+                              }
+                              disabled={!tokenValid || isSubmitting}
+                            >
+                              {showConfirmPassword ? (
+                                <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                              )}
+                            </button>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
