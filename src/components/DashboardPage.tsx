@@ -460,13 +460,40 @@ const DashboardPage = () => {
         return;
       }
 
-      // Normalisasi saat mapping
+      // Get pending top-up requests to filter out from transaction history
+      const { data: pendingTopUps, error: topUpError } = await supabase
+        .from("topup_requests")
+        .select("reference_no")
+        .eq("user_id", userId)
+        .eq("status", "pending");
+
+      if (topUpError) {
+        console.error("Error fetching pending top-ups:", topUpError);
+      }
+
+      const pendingTopUpRefs = new Set(
+        (pendingTopUps || []).map((req) => req.reference_no),
+      );
+
+      // Normalisasi saat mapping dan filter out pending top-up requests
       const normalizeTxn = (t: any) => ({
         ...t,
         keterangan: clean(t?.keterangan),
         kode_booking: clean(t?.kode_booking),
       });
-      setTransactionHistory((data ?? []).map(normalizeTxn));
+
+      const filteredTransactions = (data ?? [])
+        .map(normalizeTxn)
+        .filter((transaction) => {
+          // Hide transactions that correspond to pending top-up requests
+          const kodeBooking = transaction.kode_booking;
+          if (kodeBooking && pendingTopUpRefs.has(kodeBooking)) {
+            return false;
+          }
+          return true;
+        });
+
+      setTransactionHistory(filteredTransactions);
     } catch (error) {
       console.error("Error in fetchTransactionHistory:", error);
     } finally {
