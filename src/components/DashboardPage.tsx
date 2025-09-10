@@ -173,6 +173,7 @@ const DashboardPage = () => {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
 
   const navigate = useNavigate();
+  const selectedBank = bankMethods.find((m) => m.id === selectedBankMethod);
 
   // Mock data for demonstration
   const mockOrders: Order[] = [
@@ -2367,30 +2368,32 @@ const DashboardPage = () => {
                           onValueChange={setSelectedBankMethod}
                           className="space-y-3 max-h-48 overflow-y-auto"
                         >
-                          {bankMethods.map((method) => (
-                            <div
-                              key={method.id}
-                              className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
-                            >
-                              <RadioGroupItem
-                                value={method.id}
-                                id={method.id}
-                                className="mt-1"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <Label
-                                  htmlFor={method.id}
-                                  className="text-sm font-medium cursor-pointer"
-                                >
-                                  {method.bank_name}
-                                </Label>
-                                <div className="text-xs text-gray-600 mt-1">
-                                  <div>A/N: {method.account_holder}</div>
-                                  <div>No. Rek: {method.account_number}</div>
+                          {bankMethods
+                            .filter((method) => method.bank_name !== "BCA") // ⬅️ hide BCA
+                            .map((method) => (
+                              <div
+                                key={method.id}
+                                className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50"
+                              >
+                                <RadioGroupItem
+                                  value={method.id}
+                                  id={method.id}
+                                  className="mt-1"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <Label
+                                    htmlFor={method.id}
+                                    className="text-sm font-medium cursor-pointer"
+                                  >
+                                    {method.bank_name}
+                                  </Label>
+                                  <div className="text-xs text-gray-600 mt-1">
+                                    <div>A/N: {method.account_holder}</div>
+                                    <div>No. Rek: {method.account_number}</div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
                         </RadioGroup>
                         {selectedBankMethod && (
                           <div className="mt-3 p-2 bg-green-50 rounded text-sm text-green-700">
@@ -2498,11 +2501,13 @@ const DashboardPage = () => {
                               user_id: user.id,
                               sender_name: senderName,
                               sender_bank: senderBank,
+                              sender_account: senderAccount,
                               amount: parseInt(topUpAmount),
                               method: selectedPaymentMethod,
                               bank_name: bankName,
                               destination_account: destinationAccount,
-                              sender_account: senderAccount,
+                              account_holder_received:
+                                selectedBank?.account_holder || null, // ✅ Fix
                               note: requestNote || null,
                               reference_no: referenceNo,
                               proof_url: proofUrl,
