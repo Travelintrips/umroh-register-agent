@@ -2683,14 +2683,18 @@ const DashboardPage = () => {
                                 <TableCell>
                                   <Badge
                                     variant={
-                                      isTopUp || isTopUpRequest
+                                      transaction.status === "verified"
                                         ? "default"
-                                        : "secondary"
+                                        : transaction.status === "pending"
+                                          ? "secondary"
+                                          : "destructive"
                                     }
                                   >
-                                    {isTopUp || isTopUpRequest
+                                    {transaction.status === "verified"
                                       ? "Verified"
-                                      : "Berhasil"}
+                                      : transaction.status === "pending"
+                                        ? "Pending"
+                                        : "Rejected"}
                                   </Badge>
                                 </TableCell>
                               </TableRow>
@@ -2822,14 +2826,18 @@ const DashboardPage = () => {
                                 <TableCell>
                                   <Badge
                                     variant={
-                                      isTopUp || isTopUpRequest
+                                      transaction.status === "verified"
                                         ? "default"
-                                        : "secondary"
+                                        : transaction.status === "pending"
+                                          ? "secondary"
+                                          : "destructive"
                                     }
                                   >
-                                    {isTopUp || isTopUpRequest
+                                    {transaction.status === "verified"
                                       ? "Verified"
-                                      : "Berhasil"}
+                                      : transaction.status === "pending"
+                                        ? "Pending"
+                                        : "Rejected"}
                                   </Badge>
                                 </TableCell>
                               </TableRow>
