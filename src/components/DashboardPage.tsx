@@ -2824,21 +2824,32 @@ const DashboardPage = () => {
                                   {formatCurrency(saldoAkhir)}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant={
-                                      transaction.status === "verified"
-                                        ? "default"
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        transaction.status === "confirmed"
+                                          ? "default"
+                                          : transaction.status === "pending"
+                                            ? "secondary"
+                                            : transaction.status === "completed"
+                                              ? "default"
+                                              : transaction.status ===
+                                                  "canceled"
+                                                ? "destructive"
+                                                : "destructive"
+                                      }
+                                    >
+                                      {transaction.status === "confirmed"
+                                        ? "Confirmed"
                                         : transaction.status === "pending"
-                                          ? "secondary"
-                                          : "destructive"
-                                    }
-                                  >
-                                    {transaction.status === "verified"
-                                      ? "Verified"
-                                      : transaction.status === "pending"
-                                        ? "Pending"
-                                        : "Rejected"}
-                                  </Badge>
+                                          ? "Pending"
+                                          : transaction.status === "completed"
+                                            ? "Completed"
+                                            : transaction.status === "canceled"
+                                              ? "Canceled"
+                                              : "Rejected"}
+                                    </Badge>
+                                  </TableCell>
                                 </TableCell>
                               </TableRow>
                             );
