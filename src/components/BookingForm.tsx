@@ -270,7 +270,7 @@ const BookingForm = () => {
           .from("histori_transaksi")
           .insert({
             user_id: user?.id,
-            kode_booking: generatedBookingCode,
+            code_booking: generatedBookingCode,
             nominal: -totalPrice,
             saldo_akhir: newSaldo,
             keterangan: `Pembayaran booking agent ${generatedBookingCode}`,

@@ -103,13 +103,13 @@ const normalizeBooking = (b: any) => ({
 const buildTxnDescription = (t: any, bookings: any[]) => {
   // Jika ada kode booking yang valid, tampilkan hanya "Pembayaran booking [kode]"
   if (
-    t?.kode_booking &&
-    typeof t.kode_booking === "string" &&
-    t.kode_booking.trim() &&
-    t.kode_booking !== "undefined" &&
-    t.kode_booking !== "null"
+    t?.code_booking &&
+    typeof t.code_booking === "string" &&
+    t.code_booking.trim() &&
+    t.code_booking !== "undefined" &&
+    t.code_booking !== "null"
   ) {
-    return `Pembayaran booking ${t.kode_booking.trim()}`;
+    return `Pembayaran booking ${t.code_booking.trim()}`;
   }
 
   // Cek keterangan jika tidak ada kode booking
@@ -393,7 +393,7 @@ const DashboardPage = () => {
   // Helper function to insert transaction with correct saldo_akhir calculation
   const insertTransactionWithCorrectBalance = async (
     userId: string,
-    kodeBooking: string,
+    codeBooking: string,
     nominal: number,
     keterangan: string,
     jenisTransaksi: string,
@@ -413,7 +413,7 @@ const DashboardPage = () => {
       // Insert the transaction record with correct saldo_akhir
       const { error } = await supabase.from("histori_transaksi").insert({
         user_id: userId,
-        kode_booking: kodeBooking,
+        code_booking: codeBooking,
         nominal: nominal,
         keterangan: keterangan,
         jenis_transaksi: jenisTransaksi,
@@ -480,15 +480,15 @@ const DashboardPage = () => {
       const normalizeTxn = (t: any) => ({
         ...t,
         keterangan: clean(t?.keterangan),
-        kode_booking: clean(t?.kode_booking),
+        code_booking: clean(t?.code_booking),
       });
 
       const filteredTransactions = (data ?? [])
         .map(normalizeTxn)
         .filter((transaction) => {
           // Hide transactions that correspond to pending top-up requests
-          const kodeBooking = transaction.kode_booking;
-          if (kodeBooking && pendingTopUpRefs.has(kodeBooking)) {
+          const codeBooking = transaction.code_booking;
+          if (codeBooking && pendingTopUpRefs.has(codeBooking)) {
             return false;
           }
           return true;
@@ -1164,15 +1164,15 @@ const DashboardPage = () => {
 
   //menambahkan category di keterangan
   const buildTxnDescription = (transaction: any, handlingBookings: any[]) => {
-    const kodeBooking = transaction.kode_booking || "";
+    const codeBooking = transaction.code_booking || "";
 
     // Check if this is a top-up request (starts with "TOP-AR-" or "TOP-")
     if (
-      kodeBooking.startsWith("TOP-AR-") ||
-      (kodeBooking.startsWith("TOP-") &&
+      codeBooking.startsWith("TOP-AR-") ||
+      (codeBooking.startsWith("TOP-") &&
         transaction.jenis_transaksi === "Topup Agent Request")
     ) {
-      return `Request top up saldo - ${kodeBooking}`;
+      return `Request top up saldo - ${codeBooking}`;
     }
 
     // Check if this is a regular top-up (positive nominal)
@@ -1181,20 +1181,20 @@ const DashboardPage = () => {
       transaction.jenis_transaksi &&
       transaction.jenis_transaksi.toLowerCase().includes("topup")
     ) {
-      return `Top up saldo - ${kodeBooking || "N/A"}`;
+      return `Top up saldo - ${codeBooking || "N/A"}`;
     }
 
     // For booking payments (negative nominal or regular bookings)
-    if (kodeBooking && !kodeBooking.startsWith("TOP")) {
+    if (codeBooking && !codeBooking.startsWith("TOP")) {
       // Cari booking terkait
       const relatedBooking = handlingBookings.find(
-        (b) => b.code_booking === kodeBooking,
+        (b) => b.code_booking === codeBooking,
       );
 
       // Ambil category, kalau kosong kasih default
       const category = relatedBooking?.category || "Handling Group";
 
-      return `Pembayaran booking ${kodeBooking} - ${category}`;
+      return `Pembayaran booking ${codeBooking} - ${category}`;
     }
 
     // Fallback for other transactions
@@ -2619,9 +2619,9 @@ const DashboardPage = () => {
                                   .includes("topup"));
 
                             const isTopUpRequest =
-                              transaction.kode_booking &&
-                              (transaction.kode_booking.startsWith("TOP-AR-") ||
-                                (transaction.kode_booking.startsWith("TOP-") &&
+                              transaction.code_booking &&
+                              (transaction.code_booking.startsWith("TOP-AR-") ||
+                                (transaction.code_booking.startsWith("TOP-") &&
                                   transaction.jenis_transaksi ===
                                     "Topup Agent Request"));
 
@@ -2650,7 +2650,7 @@ const DashboardPage = () => {
                                     : "N/A"}
                                 </TableCell>
                                 <TableCell className="font-mono">
-                                  {transaction.kode_booking || "N/A"}
+                                  {transaction.code_booking || "N/A"}
                                 </TableCell>
                                 <TableCell>
                                   {buildTxnDescription(
@@ -2762,9 +2762,9 @@ const DashboardPage = () => {
                                   .includes("topup"));
 
                             const isTopUpRequest =
-                              transaction.kode_booking &&
-                              (transaction.kode_booking.startsWith("TOP-AR-") ||
-                                (transaction.kode_booking.startsWith("TOP-") &&
+                              transaction.code_booking &&
+                              (transaction.code_booking.startsWith("TOP-AR-") ||
+                                (transaction.code_booking.startsWith("TOP-") &&
                                   transaction.jenis_transaksi ===
                                     "Topup Agent Request"));
 
@@ -2793,7 +2793,7 @@ const DashboardPage = () => {
                                     : "N/A"}
                                 </TableCell>
                                 <TableCell className="font-mono">
-                                  {transaction.kode_booking || "N/A"}
+                                  {transaction.code_booking || "N/A"}
                                 </TableCell>
                                 <TableCell>
                                   {buildTxnDescription(

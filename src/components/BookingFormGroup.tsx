@@ -647,13 +647,13 @@ const BookingFormGroup = () => {
         ) => {
           // Cari booking terkait
           const relatedBooking = handlingBookings.find(
-            (b) => b.code_booking === transaction.kode_booking,
+            (b) => b.code_booking === transaction.code_booking,
           );
 
           // Ambil category, kalau kosong kasih default
           const category = relatedBooking?.category || "Handling Group";
 
-          return `Pembayaran booking ${transaction.kode_booking || "N/A"} - ${category}`;
+          return `Pembayaran booking ${transaction.code_booking || "N/A"} - ${category}`;
         };
 
         // Create transaction history record
@@ -661,7 +661,7 @@ const BookingFormGroup = () => {
           .from("histori_transaksi")
           .insert({
             user_id: user.id,
-            kode_booking: generatedBookingCode,
+            code_booking: generatedBookingCode,
             nominal: -totalAmount, // Negative for deduction
             saldo_akhir: newSaldo,
             keterangan: `Pembayaran booking ${generatedBookingCode} - ${bookingData?.category ?? "Handling"}`,
