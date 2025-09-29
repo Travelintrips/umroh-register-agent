@@ -2741,7 +2741,7 @@ const DashboardPage = () => {
                           <TableHead>Jumlah Dipotong</TableHead>
                           <TableHead>Penambahan Saldo/Topup</TableHead>
                           <TableHead>Saldo Setelah</TableHead>
-                          <TableHead>Status</TableHead>
+                          <TableHead>Status1</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2833,10 +2833,11 @@ const DashboardPage = () => {
                                             ? "secondary"
                                             : transaction.status === "completed"
                                               ? "default"
-                                              : transaction.status ===
-                                                  "canceled"
+                                              : transaction.status === "canceled"
                                                 ? "destructive"
-                                                : "destructive"
+                                                : transaction.status === "rejected"
+                                                  ? "destructive"
+                                                  : "secondary"
                                       }
                                     >
                                       {transaction.status === "confirmed"
@@ -2847,7 +2848,9 @@ const DashboardPage = () => {
                                             ? "Completed"
                                             : transaction.status === "canceled"
                                               ? "Canceled"
-                                              : "Rejected"}
+                                              : transaction.status === "rejected"
+                                                ? "Rejected"
+                                                : transaction.status || "Pending"}
                                     </Badge>
                                   </TableCell>
                                 </TableCell>
