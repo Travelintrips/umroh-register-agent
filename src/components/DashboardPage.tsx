@@ -2503,7 +2503,7 @@ const DashboardPage = () => {
                               sender_bank: senderBank,
                               sender_account: senderAccount,
                               amount: parseInt(topUpAmount),
-                              method: selectedPaymentMethod,
+                              payment_method: selectedPaymentMethod,
                               bank_name: bankName,
                               destination_account: destinationAccount,
                               account_holder_received:
@@ -2833,9 +2833,11 @@ const DashboardPage = () => {
                                             ? "secondary"
                                             : transaction.status === "completed"
                                               ? "default"
-                                              : transaction.status === "canceled"
+                                              : transaction.status ===
+                                                  "canceled"
                                                 ? "destructive"
-                                                : transaction.status === "rejected"
+                                                : transaction.status ===
+                                                    "rejected"
                                                   ? "destructive"
                                                   : "secondary"
                                       }
@@ -2848,9 +2850,11 @@ const DashboardPage = () => {
                                             ? "Completed"
                                             : transaction.status === "canceled"
                                               ? "Canceled"
-                                              : transaction.status === "rejected"
+                                              : transaction.status ===
+                                                  "rejected"
                                                 ? "Rejected"
-                                                : transaction.status || "Pending"}
+                                                : transaction.status ||
+                                                  "Pending"}
                                     </Badge>
                                   </TableCell>
                                 </TableCell>
